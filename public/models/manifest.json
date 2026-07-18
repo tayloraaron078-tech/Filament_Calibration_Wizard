@@ -1,0 +1,38 @@
+{
+  "note": "Model manifest for PerfectFit. Orca Slicer generates all core calibration tests in-slicer, so no models are bundled or required. The entries below are optional external aids. None are redistributed here because their licenses do not clearly permit bundling; users download them from the source. You may drop your own STL/3MF copies into this folder for convenience — the app never reads them, they are just stored alongside for organization.",
+  "models": [
+    {
+      "test": "Final verification",
+      "localFile": null,
+      "bundled": false,
+      "sourceUrl": "https://www.3dbenchy.com/download/",
+      "license": "Creative Commons BY-ND 4.0 (free to download and print; no redistribution of modified files)",
+      "attribution": "#3DBenchy by Creative Tools",
+      "recommendedUse": "Compact all-in-one verification: hull surfaces, overhangs, bridge roof, small details, chimney stringing.",
+      "slicerCompatibility": "Any slicer (plain STL/3MF import)",
+      "fileType": "STL / 3MF"
+    },
+    {
+      "test": "Retraction (Bambu Studio fallback)",
+      "localFile": null,
+      "bundled": false,
+      "sourceUrl": "https://www.printables.com/model/2303-retraction-test",
+      "license": "See model page; check before any redistribution",
+      "attribution": "Community stringing/retraction test models on Printables",
+      "recommendedUse": "Stringing evaluation when the slicer lacks a retraction tower generator; change only retraction distance between prints.",
+      "slicerCompatibility": "Any slicer",
+      "fileType": "STL"
+    },
+    {
+      "test": "Max flow (Bambu Studio fallback)",
+      "localFile": null,
+      "bundled": false,
+      "sourceUrl": "https://www.printables.com/model/342075-extrusion-test-structure",
+      "license": "See model page",
+      "attribution": "Stefan Hermann / CNC Kitchen — Extrusion Test Structure (inspiration for Orca's built-in test)",
+      "recommendedUse": "Measuring max volumetric flow without Orca's generator.",
+      "slicerCompatibility": "Any slicer",
+      "fileType": "STL"
+    }
+  ]
+}

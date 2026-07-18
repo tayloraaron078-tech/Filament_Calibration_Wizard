@@ -1,0 +1,13 @@
+{
+  "name": "PerfectFit Filament Calibration Wizard",
+  "short_name": "PerfectFit",
+  "description": "Local-first guided filament calibration for Orca Slicer and Bambu Studio.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#0b6bcb",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
