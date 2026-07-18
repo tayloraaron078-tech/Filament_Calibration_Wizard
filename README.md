@@ -1,5 +1,7 @@
 # PerfectFit — Filament Calibration Wizard
 
+Create a perfectly calibrated filament profile for Orca Slicer or Bambu Studio in one guided workflow. No tutorials, no guesswork, no spreadsheets.
+
 A local-first web app that walks you step by step through calibrating a filament profile
 for **Orca Slicer** (default) or **Bambu Studio** — temperature, flow ratio (two passes),
 pressure advance, retraction, max volumetric speed, and a final verification print —
