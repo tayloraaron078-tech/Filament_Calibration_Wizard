@@ -1,0 +1,119 @@
+name: "Support or calibration question"
+description: "Ask for help using PerfectFit or interpreting a calibration result"
+title: "[Question]: "
+labels:
+  - "question"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when PerfectFit appears to be working normally, but you need help understanding a step, selecting a result, or entering a value in your slicer.
+
+        If the application crashed, froze, displayed incorrect information, or failed to perform an action, please use the Bug Report form instead.
+
+  - type: checkboxes
+    id: preliminary-checks
+    attributes:
+      label: "Before submitting"
+      options:
+        - label: "I searched existing issues and did not find the same question."
+          required: true
+        - label: "The application did not crash or malfunction. If it did, I will use the Bug Report form instead."
+          required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: "PerfectFit version"
+      placeholder: "Example: v0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: slicer
+    attributes:
+      label: "Slicer"
+      options:
+        - "Orca Slicer"
+        - "Bambu Studio"
+        - "Not sure"
+        - "Not applicable"
+    validations:
+      required: true
+
+  - type: input
+    id: slicer-version
+    attributes:
+      label: "Slicer version"
+      placeholder: "Example: Orca Slicer 2.3.0"
+    validations:
+      required: false
+
+  - type: input
+    id: printer
+    attributes:
+      label: "Printer"
+      placeholder: "Example: Bambu Lab X1C"
+    validations:
+      required: false
+
+  - type: input
+    id: filament
+    attributes:
+      label: "Filament"
+      description: "Include the manufacturer, material, and product line when known."
+      placeholder: "Example: Polymaker PolyLite PETG"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: calibration
+    attributes:
+      label: "Calibration or application area"
+      options:
+        - "Pressure Advance"
+        - "Flow Rate"
+        - "Retraction"
+        - "Maximum Volumetric Speed"
+        - "Filament profile or profile installation"
+        - "Coach Mode"
+        - "General workflow"
+        - "Installation"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: "What do you need help with?"
+      description: "Explain the step you reached, what you observed, and where you became uncertain."
+      placeholder: "Describe your question in as much detail as possible."
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: "What have you already tried?"
+      description: "Include settings, test ranges, selected results, or troubleshooting already attempted."
+      placeholder: "Tell us what you have tried so far."
+    validations:
+      required: false
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: "Photos or screenshots"
+      description: "Calibration photos and slicer screenshots are often extremely helpful. Drag them into this box."
+      placeholder: "Attach photos or screenshots here."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: "Additional context"
+      description: "Include anything else that may help answer your question."
+    validations:
+      required: false
