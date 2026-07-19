@@ -105,7 +105,7 @@ Settings is the supported migration path between browser and desktop builds.
 
 Orca Slicer generates **all six core calibration tests in-slicer** — no model downloads are
 required. Optional external models (3DBenchy for verification; stringing/extrusion tests for
-Bambu Studio gaps) are **linked, not bundled**, because their licenses (e.g. CC BY-ND for
+fallback-model gaps) are **linked, not bundled**, because their licenses (e.g. CC BY-ND for
 3DBenchy) don't clearly permit redistribution inside an app. See
 [public/models/manifest.json](public/models/manifest.json) for source, license, and attribution
 of each entry.
@@ -122,7 +122,7 @@ means editing/adding one data entry. Research notes with sources and verified fo
 - Calibration menu still at top bar → `Calibration` (Orca) / `Calibration` tab (Bambu Studio)
 - Temp tower still steps 5 °C per block; retraction/PA towers still step once per mm of height
 - Flow YOLO modifiers still ±0.05 @ 0.01; Pass 2 still −9…0%
-- Bambu Studio still lacks retraction & max-flow generators
+- Bambu Studio Developer mode exposes retraction, Max Flow Rate, and VFA calibration while a Bambu printer is selected
 
 ## Architecture
 
@@ -163,7 +163,7 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
   instead of risking a broken preset. (Candidate for a future "experimental" feature.)
 - Photos are stored and exported but not analyzed (AI photo evaluation is a designed-for,
   not-built v1 exclusion, like accounts, cloud sync, and printer control).
-- Bambu Studio lacks retraction and max-flow test generators; the app provides honest fallbacks
+- Bambu Studio Developer mode exposes retraction, Max Flow Rate, and VFA calibration while a Bambu printer is selected; external models remain fallback options
   rather than pretending.
 - Suggested ranges are conservative starting points, not guarantees — spool labels and
   datasheets always win.

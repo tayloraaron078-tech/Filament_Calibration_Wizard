@@ -214,7 +214,7 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
     ],
     methods: [
       { id: 'tower', label: 'Built-in retraction tower', description: 'Twin towers with travel moves between them; retraction length increases with height. Find the lowest height that\'s clean.', slicers: ['orca'], recommended: true },
-      { id: 'bambu-manual', label: 'Manual test model (Bambu Studio)', description: 'Bambu Studio has no retraction tower generator; use a stringing test model and change retraction per print, one variable at a time.', slicers: ['bambu'] }
+      { id: 'bambu-developer', label: 'Bambu Studio Developer mode retraction test', description: 'Developer mode exposes Bambu Studio\'s retraction test while your Bambu printer is selected; fallback to a stringing model if Developer mode is unavailable.', slicers: ['bambu'] }
     ],
     evaluationGuide: [
       { title: 'Fine hairs', look: 'Thin wispy strands between the two towers, easily brushed off.', meaning: 'Mild under-retraction (or slightly wet filament) at that height.', severity: 'adjust' },
@@ -229,7 +229,7 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
     versionNotes: [
       'Orca v2.x defaults: 0→2 mm step 0.1 (direct drive); the wiki suggests 1→6 mm step 0.2 for Bowden.',
       'Find the best height, then read the exact length from the G-code preview: search for the Calib_Retraction_tower comment (the plain "retract" lines can be misleading with wipe settings).',
-      'Bambu Studio has no retraction tower; calibrate with a stringing model, changing only one variable per print.'
+      'Bambu Studio Developer mode exposes the retraction test while a Bambu printer is selected; without Developer mode, fall back to a stringing model and change only one variable per print.'
     ]
   },
 
@@ -261,7 +261,7 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
     ],
     methods: [
       { id: 'tower', label: 'Built-in max flowrate test', description: 'A thin-walled tower whose volumetric speed ramps from start to end continuously with height. Measure where defects begin.', slicers: ['orca'], recommended: true },
-      { id: 'manual-calc', label: 'Manual observation + calculator', description: 'For slicers without the test (Bambu Studio): use the volumetric flow calculator and known-good speeds, or print CNC-Kitchen-style test structures.', slicers: ['bambu'] }
+      { id: 'bambu-developer', label: 'Bambu Studio Developer mode Max Flow Rate', description: 'Developer mode exposes Bambu Studio\'s Max Flow Rate test while your Bambu printer is selected; fallback to the calculator or external flow models if unavailable.', slicers: ['bambu'] }
     ],
     evaluationGuide: [
       { title: 'Sheen change', look: 'A band where the surface turns from glossy to matte (or vice versa).', meaning: 'Often the first sign the melt is falling behind — note its height even if walls still look solid.', severity: 'adjust' },
@@ -276,7 +276,7 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
       'Orca v2.x default test range: 5→20 mm³/s, step 0.5 per mm of height. Result = start + measured_height × step.',
       'Alternative reading: in Preview with the "Flow" color scheme, find the flow value at your measured layer.',
       'The official wiki recommends reducing the measured value 10–20% for production — this app defaults to 15% headroom (configurable).',
-      'Bambu Studio has no equivalent generator; use the calculator approach.'
+      'Bambu Studio Developer mode exposes Max Flow Rate and VFA calibration while a Bambu printer is selected; use the calculator approach only as a fallback.'
     ]
   },
 
