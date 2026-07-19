@@ -202,3 +202,31 @@ pub fn get_platform_info() -> PlatformInfo {
         os_version: std::env::consts::OS.to_string(),
     }
 }
+
+#[cfg(test)]
+mod manual_probe {
+    // One-off supervised probe (cargo test -- --ignored). Read-only.
+    #[test]
+    #[ignore]
+    fn probe_real_detection() {
+        let out = super::detect_supported_slicers().unwrap();
+        for s in &out {
+            println!("{} | v={:?} | exe={:?} | preset_folder={:?}", s.slicer_id, s.conf_version, s.executable_path.is_some(), s.preset_folder);
+            for l in &s.user_locations {
+                println!("   loc {} active={} presets={}", l.account_id, l.active, l.filament_profile_count);
+            }
+        }
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_real_scan() {
+        let files = crate::slicer_integration::filesystem::scan_slicer_profiles("elegoo".into(), "default".into()).unwrap();
+        let user = files.iter().filter(|f| f.dir_kind == "user").count();
+        let base = files.iter().filter(|f| f.dir_kind == "user_base").count();
+        let system = files.iter().filter(|f| f.dir_kind == "system").count();
+        println!("elegoo scan: user={user} base={base} system={system}");
+        assert!(user > 0);
+    }
+}

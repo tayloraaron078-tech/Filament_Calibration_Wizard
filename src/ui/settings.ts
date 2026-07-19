@@ -4,6 +4,8 @@ import { exportAll, importBackup } from '../export/backup';
 import { importFilePicker } from './importExport';
 import { applyTheme } from '../app';
 import { idb } from '../storage/db';
+import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerIntegration/featureFlags';
+import * as bridge from '../slicerIntegration/bridge';
 
 export function renderSettings(root: HTMLElement): void {
   const s = loadSettings();
@@ -62,6 +64,8 @@ export function renderSettings(root: HTMLElement): void {
         h('button', { class: 'btn', onClick: () => importFilePicker(() => { clear(root); renderSettings(root); toast('Restored.', 'success'); }) }, '📥 Restore from backup')
       )
     ),
+    experimentalCard(),
+    slicerBackupsCard(),
     h('div', { class: 'card' },
       h('h2', { style: 'margin-top:0' }, 'Privacy'),
       h('ul', {},
@@ -95,4 +99,95 @@ export function renderSettings(root: HTMLElement): void {
         }, '🗑 Erase all local data'))
     )
   );
+}
+
+function experimentalCard(): HTMLElement {
+  const f = loadExperimentalFeatures();
+  const mk = (key: keyof typeof f, label: string, help: string) => {
+    const cb = h('input', { type: 'checkbox', checked: f[key] }) as HTMLInputElement;
+    cb.addEventListener('change', () => {
+      const next = loadExperimentalFeatures();
+      next[key] = cb.checked;
+      saveExperimentalFeatures(next);
+      toast('Experimental settings saved.', 'success');
+    });
+    return h('label', { class: 'check-item' }, cb,
+      h('div', {}, h('strong', {}, label), h('p', { class: 'coach-note' }, help)));
+  };
+  return h('div', { class: 'card' },
+    h('h2', { style: 'margin-top:0' }, '🧪 Experimental features'),
+    h('p', { class: 'field-help' }, 'The slicer profile installer is experimental. PerfectFit backs up affected slicer files before any installation, and unverified slicer versions stay export-only.'),
+    mk('slicerProfileGeneration', 'Slicer profile generation', 'Create filament profiles from completed calibrations (clone a base profile, patch calibrated values).'),
+    mk('automaticProfileInstallation', 'Automatic profile installation', 'Allow direct installation into verified slicer versions (desktop app only). Export always remains available.'),
+    mk('advancedProfileSelection', 'Advanced profile selection', 'Show every detected profile with filters, raw JSON, and override options.'),
+    mk('unsupportedVersionOverride', 'Unverified version override (not recommended)', 'Allow direct installation into slicer versions that have not been verified. Export is the safer choice.')
+  );
+}
+
+function slicerBackupsCard(): HTMLElement {
+  const card = h('div', { class: 'card' },
+    h('h2', { style: 'margin-top:0' }, '🗄 Slicer profile backups'),
+    h('p', { class: 'field-help' }, 'Before installing a profile, PerfectFit backs up the affected slicer files with checksums. Restore puts the original files back exactly as they were.'));
+  if (!bridge.isDesktop()) {
+    card.append(h('p', { class: 'field-help' }, 'Available in the PerfectFit desktop app.'));
+    return card;
+  }
+  const host = h('div', {});
+  card.append(host);
+  const refresh = async () => {
+    clear(host);
+    let backups;
+    try {
+      backups = await bridge.listProfileBackups();
+    } catch (e) {
+      host.append(h('p', { class: 'field-help' }, `Could not list backups: ${String(e)}`));
+      return;
+    }
+    if (!backups.length) {
+      host.append(h('p', { class: 'field-help' }, 'No backups yet. One is created automatically on every profile installation.'));
+      return;
+    }
+    host.append(h('div', { class: 'table-scroll' }, h('table', { class: 'data' },
+      h('thead', {}, h('tr', {},
+        h('th', {}, 'Created'), h('th', {}, 'Slicer'), h('th', {}, 'Profile'), h('th', {}, 'Files'), h('th', {}, ''))),
+      h('tbody', {}, backups.map(b => h('tr', {},
+        h('td', {}, b.created_at.replace('T', ' ').replace('Z', ' UTC')),
+        h('td', {}, b.slicer_id),
+        h('td', {}, b.installed_profile_name),
+        h('td', {}, String(b.file_count)),
+        h('td', {}, h('div', { class: 'btn-row' },
+          h('button', {
+            class: 'btn btn-sm', onClick: () => bridge.openBackupDirectory(b.backup_id).catch(e => toast(String(e), 'error'))
+          }, '📂 Open'),
+          h('button', {
+            class: 'btn btn-sm', onClick: async () => {
+              const ok = await confirmDialog({
+                title: 'Restore this backup?',
+                body: `Restores the slicer files exactly as they were before installing “${b.installed_profile_name}”. The profile installed at that time will be removed. Close the slicer first.`,
+                confirmLabel: 'Restore'
+              });
+              if (!ok) return;
+              try {
+                const r = await bridge.restoreProfileBackup(b.backup_id);
+                toast(`Restored ${r.restored_files.length} file(s), removed ${r.deleted_files.length}.`, 'success');
+              } catch (e) { toast(`Restore failed: ${String(e)}`, 'error'); }
+            }
+          }, '⟲ Restore'),
+          h('button', {
+            class: 'btn btn-sm btn-danger', onClick: async () => {
+              const ok = await confirmDialog({
+                title: 'Delete this backup?',
+                body: 'The backed-up slicer files will no longer be restorable from PerfectFit.',
+                confirmLabel: 'Delete backup', danger: true
+              });
+              if (!ok) return;
+              try { await bridge.deleteProfileBackup(b.backup_id); await refresh(); }
+              catch (e) { toast(String(e), 'error'); }
+            }
+          }, '🗑')
+        ))
+      ))))));
+  };
+  void refresh();
+  return card;
 }
