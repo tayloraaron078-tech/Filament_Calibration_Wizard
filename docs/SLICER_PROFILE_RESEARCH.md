@@ -219,7 +219,7 @@ Notes:
 ## Unverified items (kept out of default behavior)
 
 - macOS paths for all five slicers (documented upstream, not yet inspected here).
-- Linux paths (out of scope; PerfectFit desktop targets Win/macOS).
+- Linux paths and native slicer integration behavior (Linux desktop packages are built, but profile detection/install is not yet verified).
 - Whether each slicer tolerates a missing `.info` for a new preset (observed existing
   presets without sidecars in Orca-Flashforge, so likely; we always write one anyway).
 - Bambu Studio cloud re-sync behavior for presets written into an account dir.

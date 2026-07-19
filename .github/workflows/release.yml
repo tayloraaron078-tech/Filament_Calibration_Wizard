@@ -17,29 +17,67 @@ jobs:
         include:
           - platform: macos-latest
             args: '--target universal-apple-darwin --bundles dmg'
+          - platform: ubuntu-22.04
+            args: '--bundles deb,appimage'
           - platform: windows-latest
             args: '--bundles nsis'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'PerfectFit ${{ github.ref_name }}'
-          releaseBody: 'See CHANGELOG or commit history for details.'
+          releaseBody: |
+            # PerfectFit 1.1.0
+
+            PerfectFit 1.1.0 adds Linux desktop packages alongside the existing Windows and macOS release assets, and rolls up the slicer profile installer work, Bambu Studio Developer mode calibration guidance, documentation improvements, and project-health updates completed since 1.0.0.
+
+            ## Downloads
+
+            - Windows: NSIS installer (`.exe`).
+            - macOS: universal Apple Silicon + Intel disk image (`.dmg`).
+            - Linux: Debian package (`.deb`) plus portable AppImage (`.AppImage`) for broad distro coverage.
+
+            ## Highlights since 1.0.0
+
+            - Added experimental slicer profile generation and direct install workflows for Orca Slicer, Bambu Studio, Snapmaker Orca, ElegooSlicer, and Flash Studio Desktop.
+            - Added transactional backups, restore support, diff previews, profile compatibility scoring, and validation so generated profiles only patch values backed by completed calibration steps.
+            - Verified Windows direct-install flows against real slicer account directories for Orca Slicer and Bambu Studio, including Bambu dual-nozzle array preservation.
+            - Updated Bambu Studio coached wizard pages to recommend Developer mode as the best way to access manual calibration tests while a Bambu printer remains selected.
+            - Documented Bambu Developer mode availability for Temperature, Flow Rate coarse/fine (no YOLO), Pressure Advance / Flow Dynamics, Retraction, Max Flow Rate, and VFA.
+            - Added Linux release packaging via `.deb` and AppImage artifacts.
+            - Added issue templates, contribution guidance, security policy, code of conduct, pull request template, and expanded automated coverage.
+
+            ## Known limitations
+
+            - Linux native slicer profile detection/install behavior is not yet claimed as verified; Linux packages are provided so users can run the desktop app and use browser-equivalent/export workflows while native Linux slicer integration is validated.
+            - macOS native slicer path detection remains documented but not fully real-machine verified.
+            - Cloud-synchronized Orca/Bambu account directories may later sync, duplicate, re-id, or remove local preset files; PerfectFit surfaces this caveat and keeps backups for installed profiles.
+            - VFA is mentioned where Bambu Developer mode exposes it, but PerfectFit does not currently have a dedicated VFA scoring step.
           releaseDraft: true
+          prerelease: false
           args: ${{ matrix.args }}

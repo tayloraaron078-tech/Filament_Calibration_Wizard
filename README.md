@@ -66,12 +66,12 @@ Served over HTTP(S), the app also installs as a PWA and works offline after firs
 > Moving the app to a different domain/port means starting fresh — export a backup first
 > and restore it from Settings.
 
-## Packaging as a Windows .exe (Tauri)
+## Packaging as a desktop app (Tauri)
 
 Tauri v2 wraps the static build in a small native shell (preferred over Electron: ~10 MB vs ~150 MB).
 
 ```bash
-# prerequisites: Rust toolchain (rustup), Microsoft VS C++ Build Tools, WebView2 (preinstalled on Win 11)
+# prerequisites: Rust toolchain (rustup) plus the OS-specific Tauri prerequisites for Windows, macOS, or Linux
 npm install -D @tauri-apps/cli
 npx tauri init
 #   ✔ app name: PerfectFit
@@ -80,7 +80,7 @@ npx tauri init
 #   ✔ before dev command: npm run dev
 #   ✔ before build command: npm run build
 npx tauri dev      # develop inside the native window
-npx tauri build    # produces src-tauri/target/release/PerfectFit.exe (+ MSI/NSIS installers)
+npx tauri build    # produces the native app plus configured bundles for the current OS
 ```
 
 No code changes are required — the app already avoids absolute URLs and needs no server.
@@ -146,7 +146,7 @@ src/
   storage/               # IndexedDB wrapper + repository, drafts, settings
   export/backup.ts       # JSON export/import with schema versioning & migration
   ui/                    # dashboard, printers, project views, wizard, forms, report, card…
-tests/                   # vitest suites (61 tests)
+tests/                   # vitest suites (111 tests)
 docs/                    # research notes + manual test checklist
 ```
 
