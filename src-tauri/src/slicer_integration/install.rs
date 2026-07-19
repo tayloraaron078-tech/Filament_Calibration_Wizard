@@ -363,6 +363,52 @@ pub async fn save_exported_profile(
 mod tests {
     use super::*;
 
+    // MANUAL harness (supervised, #[ignore]). Drives the PRODUCTION install_core
+    // and restore_backup_inner against a real slicer dir passed via env vars, so
+    // the profile-installer manual test exercises the exact production code path.
+    // Never runs in the normal suite. Env:
+    //   MANUAL_DEST_DIR, MANUAL_RESTORE_ROOT, MANUAL_BACKUP_ROOT, MANUAL_GEN_DIR,
+    //   MANUAL_TAG (base name of <tag>.json/.info in GEN_DIR), MANUAL_SLICER,
+    //   MANUAL_PROFILE_NAME, MANUAL_BACKUP_ID (restore only)
+    #[test]
+    #[ignore]
+    fn manual_install_from_env() {
+        let dest = std::env::var("MANUAL_DEST_DIR").unwrap();
+        let restore_root = std::env::var("MANUAL_RESTORE_ROOT").unwrap();
+        let backup_root = std::env::var("MANUAL_BACKUP_ROOT").unwrap();
+        let gen = std::env::var("MANUAL_GEN_DIR").unwrap();
+        let tag = std::env::var("MANUAL_TAG").unwrap();
+        let slicer = std::env::var("MANUAL_SLICER").unwrap();
+        let name = std::env::var("MANUAL_PROFILE_NAME").unwrap();
+        std::fs::create_dir_all(&backup_root).unwrap();
+        let json = std::fs::read_to_string(format!("{gen}/{tag}.json")).unwrap();
+        let info = std::fs::read_to_string(format!("{gen}/{tag}.info")).unwrap();
+        let out = super::install_core(
+            std::path::Path::new(&dest),
+            std::path::Path::new(&backup_root),
+            std::path::Path::new(&restore_root),
+            &slicer, &name, &json, &info, "manual-e2e", false,
+        );
+        println!("MANUAL_INSTALL_RESULT: {}", serde_json::to_string(&out).unwrap());
+        assert!(out.success, "install failed: {:?}", out.error_detail);
+        assert!(out.verification_passed);
+    }
+
+    #[test]
+    #[ignore]
+    fn manual_restore_from_env() {
+        let backup_root = std::env::var("MANUAL_BACKUP_ROOT").unwrap();
+        let restore_root = std::env::var("MANUAL_RESTORE_ROOT").unwrap();
+        let slicer = std::env::var("MANUAL_SLICER").unwrap();
+        let backup_id = std::env::var("MANUAL_BACKUP_ID").unwrap();
+        let manifest_path = format!("{backup_root}/{slicer}/{backup_id}/manifest.json");
+        let manifest: backup::ProfileBackupManifest =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        let (restored, deleted) =
+            backup::restore_backup_inner(&manifest, std::path::Path::new(&restore_root)).unwrap();
+        println!("MANUAL_RESTORE_RESULT: restored={restored:?} deleted={deleted:?}");
+    }
+
     struct TempRoot(PathBuf);
     impl TempRoot {
         fn new(tag: &str) -> Self {
