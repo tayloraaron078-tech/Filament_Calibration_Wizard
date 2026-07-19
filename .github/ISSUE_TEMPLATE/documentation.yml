@@ -1,0 +1,105 @@
+name: "Documentation correction"
+description: "Report unclear, missing, outdated, or incorrect instructions"
+title: "[Docs]: "
+labels:
+  - "documentation"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when an instruction, explanation, label, or calibration procedure is unclear, incorrect, outdated, or incomplete.
+
+  - type: checkboxes
+    id: preliminary-checks
+    attributes:
+      label: "Before submitting"
+      options:
+        - label: "I searched existing issues and did not find the same documentation problem."
+          required: true
+        - label: "I checked the latest available version of PerfectFit."
+          required: true
+
+  - type: dropdown
+    id: location
+    attributes:
+      label: "Where is the problem?"
+      options:
+        - "README"
+        - "Installation instructions"
+        - "Orca Slicer instructions"
+        - "Bambu Studio instructions"
+        - "Pressure Advance"
+        - "Flow Rate"
+        - "Retraction"
+        - "Maximum Volumetric Speed"
+        - "Filament profile instructions"
+        - "Coach Mode"
+        - "Text within the application"
+        - "Release notes"
+        - "Other"
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: "PerfectFit version"
+      placeholder: "Example: v0.1.0"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: slicer
+    attributes:
+      label: "Affected slicer"
+      options:
+        - "Orca Slicer"
+        - "Bambu Studio"
+        - "Both slicers"
+        - "Not applicable"
+    validations:
+      required: true
+
+  - type: input
+    id: slicer-version
+    attributes:
+      label: "Slicer version"
+      placeholder: "Example: Bambu Studio 2.2.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: current-wording
+    attributes:
+      label: "Current wording or instruction"
+      description: "Quote or summarize the section that needs improvement."
+      placeholder: "Paste the current wording or explain where it appears."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What is unclear or incorrect?"
+      description: "Explain what could confuse users or lead to an incorrect result."
+      placeholder: "Describe the documentation problem."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-correction
+    attributes:
+      label: "Suggested correction"
+      description: "Provide replacement wording or explain what information should be added."
+      placeholder: "Suggest a correction if you have one."
+    validations:
+      required: false
+
+  - type: textarea
+    id: supporting-information
+    attributes:
+      label: "Screenshots or supporting information"
+      description: "Drag screenshots or other supporting files into this box."
+      placeholder: "Attach supporting material here."
+    validations:
+      required: false
