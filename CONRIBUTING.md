@@ -11,9 +11,6 @@ There are several ways you can contribute.
 - Test beta releases
 
 Before creating a new Issue, please search existing issues to avoid duplicates.
-# Contributing to PerfectFit Filament Calibration Wizard
-
-Thank you for helping improve PerfectFit Filament Calibration Wizard.
 
 PerfectFit is a guided desktop application that helps users calibrate filament for Orca Slicer and Bambu Studio. Contributions may include bug reports, feature suggestions, documentation improvements, testing, and code changes.
 
@@ -88,13 +85,11 @@ PerfectFit uses Tauri with a web frontend and Rust backend.
 ### Clone and run the project
 
 ```bash
-git clone https://github.com/OWNER/REPOSITORY.git
+git clone https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard.git
 cd REPOSITORY
 npm install
 npm run tauri dev
 ```
-
-Replace `OWNER` and `REPOSITORY` with the correct GitHub repository information.
 
 ### Build the application
 
