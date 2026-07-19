@@ -37,6 +37,43 @@ Key design-driving discoveries:
    `tests/slicerIntegration/fixtures/` (account ids stripped; no personal data in
    preset bodies).
 
+## 2026-07-19 — Phases 2–6: implementation
+
+- **Native layer** (`src-tauri/src/slicer_integration/`): detection (conf
+  version + active `preset_folder`), read-only scanning (user / base-cache /
+  system vendor libraries), process detection via `tasklist`/`ps` image names,
+  SHA-256 checksummed backups with manifests, transactional install
+  (`install_core` with injected roots for testability), semantic verify,
+  save-dialog export (`tauri-plugin-dialog`). All frontend-supplied names are
+  validated (`security.rs`): traversal, separators, reserved names, extension
+  allowlist; writes only ever resolve inside slicer `user/*/filament` dirs or
+  the PerfectFit backup root.
+- **TS engine** (`src/slicerIntegration/`): shared Orca-family parser +
+  clone-and-patch (`orcaFamily.ts`), five thin adapters over a common base
+  with per-slicer quirks, deterministic recommendations with reason lists,
+  generator gated on completed calibration steps only, diff summarizer that
+  flags any non-calibrated drift as an error, validation (limits never
+  clamped), installer/export orchestration, diagnostics with path redaction,
+  feature flags (separate localStorage key).
+- **UI**: `#/profile/:id` wizard (slicer → base profile → configure → preview
+  → install/export), completion CTA + generated-profile records in project
+  view, Settings cards for experimental flags and backup management.
+- **Schema v2**: `CalibrationProject.generatedProfiles`; migration normalizes
+  older files; backups include the records.
+- **Tests**: 48 new vitest tests (fixture round trips incl. dual-nozzle
+  Bambu and unknown-field preservation) + 7 cargo integration tests in temp
+  dirs (fresh install, duplicate, replace+restore, checksum corruption guard,
+  traversal). One pre-existing migration test updated for v2 (expected).
+- **Verification runs** (2026-07-19, Windows 11): browser-mode E2E in dev
+  server (manual file → generate → preview → export/save; no console
+  errors); read-only native probes detected all five real slicer installs
+  with correct versions/active dirs/preset counts and scanned ElegooSlicer
+  (3 user / 2 cache / 310 system presets).
+- **Gating decision:** `directInstallVerified` stays **false** for all five
+  slicers until the real-slicer manual checklist passes
+  (docs/PROFILE_INSTALLER_MANUAL_TESTS.md); install UI shows export-only
+  messaging for unverified versions.
+
 **Decisions:**
 
 - Generated preset identity: `name` + `filament_settings_id` = new name; `version`
