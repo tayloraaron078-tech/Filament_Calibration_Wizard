@@ -28,11 +28,19 @@ touched dir was SHA-256 hashed before and restored + re-hashed after.
   values correct. **Flipped `directInstallVerified: true`.** (In-GUI value
   display not separately opened — the settings pencil opens the parent preset —
   but the successful slice exercises the applied values.)
-- **Orca 2.4.2 / Bambu 02.07.01.62** — install/backup/verify/restore mechanics
-  passed into the **local `default`** dir only. Their active dirs are
-  cloud-linked account folders; deliberately not written (cloud-safety), so no
-  in-GUI/slice test. Account dirs confirmed byte-identical before/after (Orca
-  16/16, Bambu 138/138). Stay gated.
+- **Orca 2.4.2 / Bambu 02.07.01.62 — FULL PASS in real cloud account dirs**
+  (follow-up, after the repo owner confirmed dropping presets into account
+  folders is their normal working flow). Installed into the active account dir
+  of each signed-in slicer; preset appeared with correct values; both sliced a
+  cube cleanly; restored byte-identical (Orca 16/16, Bambu 138/138). Bambu also
+  exercised the real dual-nozzle path (cloned an H2S dual-nozzle base, patched
+  only tool 0; on disk temp `["213","260"]`, flow `["1.03","0.98"]`). Printer
+  selections changed to reveal the presets were set back to originals (Orca→H2S
+  0.4, Bambu→H2D). **Flipped `directInstallVerified: true` for both.** All five
+  slicers now enabled on Windows. Cloud-sync caveat retained as a UI warning.
+  Re-earlier caution about the account dirs was overcautious: the write itself
+  is identical to a manual drop; only the slicer's later cloud reconciliation is
+  the (cosmetic) caveat.
 
 Blocker found & fixed en route: WebView2's HTML file-picker (used by the
 existing Import flow) runs in an un-grantable child process, so the app UI

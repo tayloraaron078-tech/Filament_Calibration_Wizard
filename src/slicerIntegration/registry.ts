@@ -114,9 +114,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // install mechanics verified into local dir only; active dir is cloud-linked
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Scanning + generation verified against Orca Slicer 2.4.2, Windows 11. Install/backup/verify/restore mechanics passed against the local default dir; the active preset dir is a cloud-linked account folder, deliberately not written to, and no in-GUI/slice test was run — direct install stays gated pending an account-dir-safe test.']
+    notes: ['Full manual E2E pass on Orca Slicer 2.4.2, Windows 11, in the real cloud-linked account dir (signed in to Orca Cloud): transactional install + verified backup, preset appears in the filament list (Elegoo OrangeStorm Giga 0.6 nozzle), model slices cleanly, backup restore returns the account directory byte-identical to baseline. Cloud caveat: the slicer may later sync/duplicate/re-id presets in an account dir — surfaced as a user warning, not a blocker.']
   },
   {
     slicerId: 'bambu',
@@ -124,9 +124,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // install mechanics verified into local dir only; active dir is cloud-linked
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Scanning + generation verified against Bambu Studio 02.07.01.62, Windows 11 (incl. dual-nozzle H2S presets). Install/backup/verify/restore mechanics passed against the local default dir; the active preset dir is a cloud-linked account folder, deliberately not written to, and no in-GUI/slice test was run — direct install stays gated pending an account-dir-safe test.']
+    notes: ['Full manual E2E pass on Bambu Studio 02.07.01.62, Windows 11, in the real cloud-linked account dir (signed in as user_3964423668): transactional install + verified backup, preset appears under Custom presets with correct values (Type PCTG, flow 1.03), dual-nozzle array preserved (tool 0 patched, tool 1 untouched: temp ["213","260"]), model slices cleanly, backup restore returns the account directory byte-identical to baseline. Cloud caveat: the slicer may later sync/duplicate/re-id presets in an account dir — surfaced as a user warning, not a blocker.']
   },
   {
     slicerId: 'snapmaker-orca',

@@ -68,18 +68,17 @@ automatic backup.
 | ElegooSlicer 1.5.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E incl. slice + restore) |
 | Flash Studio (Orca-Flashforge) 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E incl. slice + restore) |
 | Snapmaker Orca 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E on multi-tool U1 incl. slice + restore) |
-| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ install mechanics verified (local dir); active dir is cloud-linked, GUI+slice pending |
-| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ⏳ install mechanics verified (local dir); active dir is cloud-linked, GUI+slice pending |
+| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir incl. slice + restore) |
+| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir; real dual-nozzle tool-0 patch; slice + restore) |
 | macOS (all) | ⏳ unverified paths | ✅ | ✅ | ✖ disabled |
 
-Automatic installation is enabled only where `docs/SLICER_PROFILE_TEST_MATRIX.md`
-records a full real-slicer pass. As of 2026-07-19 that is **ElegooSlicer 1.5.x,
-Flash Studio (Orca-Flashforge) 01.10.x, and Snapmaker Orca 01.10.x on Windows**
-— each installed, appeared, loaded the calibrated values, sliced a model, and
-restored cleanly (Snapmaker on its multi-tool U1). Orca Slicer and Bambu Studio
-stay export-only: their active preset folders are cloud-linked, so only the
-install mechanics were verified (into a local dir) — an account-dir-safe
-GUI+slice test is the remaining step.
+Automatic installation is enabled on **all five slicers on Windows** — each was
+installed into its real active preset folder (Orca and Bambu while signed in to
+their clouds), showed the preset with the calibrated values, sliced a model, and
+restored byte-identical. See `docs/SLICER_PROFILE_TEST_MATRIX.md` for per-slicer
+evidence. Cloud caveat (Orca/Bambu accounts): a signed-in slicer may later sync,
+duplicate, or re-id a locally installed preset — surfaced as a user warning, not
+a blocker. macOS remains disabled pending path verification.
 
 ### Safety
 
@@ -103,10 +102,11 @@ GUI+slice test is the remaining step.
 
 ### Known Limitations
 
-- Automatic installation is enabled for ElegooSlicer 1.5.x, Flash Studio 01.10.x,
-  and Snapmaker Orca 01.10.x on Windows (full real-slicer passes). Orca Slicer
-  and Bambu Studio remain export-only pending an account-dir-safe GUI+slice test
-  (their active preset dirs are cloud-linked).
+- Automatic installation is enabled for all five slicers on Windows (each with a
+  full real-slicer pass). macOS is export-only pending path verification.
+- Cloud caveat (Orca/Bambu with a signed-in account): the slicer may later sync,
+  duplicate, or re-identify a locally installed preset. This is cosmetic (not
+  data loss) and is surfaced as a warning when installing into an account dir.
 - macOS: slicer paths documented upstream but not yet verified; detection is
   best-effort and install stays disabled.
 - Cloud-synchronized preset folders (Bambu/Orca accounts): the slicer may
