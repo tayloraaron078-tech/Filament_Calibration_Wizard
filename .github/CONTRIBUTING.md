@@ -75,13 +75,11 @@ PerfectFit uses Tauri with a web frontend and Rust backend.
 ### Clone and run the project
 
 ```bash
-git clone https://github.com/OWNER/REPOSITORY.git
+git clone (https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard.git)
 cd REPOSITORY
 npm install
 npm run tauri dev
 ```
-
-Replace `OWNER` and `REPOSITORY` with the correct GitHub repository information.
 
 ### Build the application
 
