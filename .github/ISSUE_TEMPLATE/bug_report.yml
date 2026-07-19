@@ -1,157 +1,157 @@
-name: Bug report
-description: Report a reproducible problem with the PerfectFit Filament Calibration Wizard
+name: "Bug report"
+description: "Report a reproducible problem with PerfectFit"
 title: "[Bug]: "
 labels:
+  - "bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve PerfectFit!
 
-* bug
-  body:
+        Use this form for problems with the application itself, including crashes, incorrect behavior, broken controls, installation failures, or instructions that do not match the selected slicer.
 
-* type: markdown
-  attributes:
-  value: |
-  Thanks for helping improve PerfectFit!
+        If the application worked normally but you need help interpreting a calibration result, please use the Support or Calibration Question form instead.
 
-  ```
-  Please use this form for problems with the application itself, such as crashes, incorrect behavior, broken buttons, installation failures, or instructions that do not match the selected slicer.
+  - type: checkboxes
+    id: preliminary-checks
+    attributes:
+      label: "Before submitting"
+      description: "Please complete these checks before opening a bug report."
+      options:
+        - label: "I searched existing issues and did not find the same problem."
+          required: true
+        - label: "I am using the latest available version of PerfectFit."
+          required: true
+        - label: "I can reproduce the problem, or I have explained why it cannot be reproduced consistently."
+          required: true
 
-  Unexpected print results are not always application bugs. If the wizard worked normally but the calibration print did not turn out as expected, please use the Support or Calibration Question form instead.
-  ```
+  - type: input
+    id: app-version
+    attributes:
+      label: "PerfectFit version"
+      description: "The version is shown in the application or on the GitHub release page."
+      placeholder: "Example: v0.1.0"
+    validations:
+      required: true
 
-* type: checkboxes
-  id: checks
-  attributes:
-  label: Before submitting
-  description: Please complete these checks before opening a bug report.
-  options:
-  - label: I searched existing issues and did not find the same problem.
-  required: true
-  - label: I am using the latest available version of PerfectFit.
-  required: true
-  - label: I can reproduce the problem, or I have explained why it cannot be reproduced consistently.
-  required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: "Operating system"
+      options:
+        - "Windows 11"
+        - "Windows 10"
+        - "macOS on Apple silicon"
+        - "macOS on Intel"
+        - "Other"
+    validations:
+      required: true
 
-* type: input
-  id: app-version
-  attributes:
-  label: PerfectFit version
-  description: The version is shown in the application or on the GitHub release page.
-  placeholder: "Example: v0.1.0"
-  validations:
-  required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: "Operating system version"
+      description: "Include the Windows build number or macOS version when possible."
+      placeholder: "Example: Windows 11 24H2, build 26100"
+    validations:
+      required: false
 
-* type: dropdown
-  id: operating-system
-  attributes:
-  label: Operating system
-  options:
-  - Windows 11
-  - Windows 10
-  - macOS Apple Silicon
-  - macOS Intel
-  - Other
-  validations:
-  required: true
+  - type: dropdown
+    id: slicer
+    attributes:
+      label: "Selected slicer"
+      options:
+        - "Orca Slicer"
+        - "Bambu Studio"
+        - "The issue occurs before selecting a slicer"
+        - "Not applicable"
+    validations:
+      required: true
 
-* type: input
-  id: os-version
-  attributes:
-  label: Operating system version
-  description: Include the Windows build number or macOS version when possible.
-  placeholder: "Example: Windows 11 24H2, build 26100"
-  validations:
-  required: false
+  - type: input
+    id: slicer-version
+    attributes:
+      label: "Slicer version"
+      placeholder: "Example: Orca Slicer 2.3.0"
+    validations:
+      required: false
 
-* type: dropdown
-  id: slicer
-  attributes:
-  label: Selected slicer
-  options:
-  - Orca Slicer
-  - Bambu Studio
-  - The issue occurs before selecting a slicer
-  - Not applicable
-  validations:
-  required: true
+  - type: dropdown
+    id: calibration-step
+    attributes:
+      label: "Calibration step or application area"
+      options:
+        - "Installation or startup"
+        - "Slicer selection"
+        - "Pressure Advance"
+        - "Flow Rate"
+        - "Retraction"
+        - "Maximum Volumetric Speed"
+        - "Filament profile or profile installation"
+        - "Results summary"
+        - "Coach Mode"
+        - "Navigation or user interface"
+        - "Other or not applicable"
+    validations:
+      required: true
 
-* type: input
-  id: slicer-version
-  attributes:
-  label: Slicer version
-  placeholder: "Example: Orca Slicer 2.3.0"
-  validations:
-  required: false
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What happened?"
+      description: "Clearly describe the problem and include any error messages."
+      placeholder: "Tell us what the application did."
+    validations:
+      required: true
 
-* type: dropdown
-  id: calibration-step
-  attributes:
-  label: Calibration step
-  options:
-  - Installation or startup
-  - Slicer selection
-  - Pressure Advance
-  - Flow Rate
-  - Retraction
-  - Maximum Volumetric Speed
-  - Filament profile or profile installation
-  - Results summary
-  - Coach Mode
-  - Navigation or user interface
-  - Other or not applicable
-  validations:
-  required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: "What did you expect to happen?"
+      placeholder: "Tell us what you expected the application to do."
+    validations:
+      required: true
 
-* type: textarea
-  id: problem
-  attributes:
-  label: What happened?
-  description: Clearly describe the problem and any error messages that appeared.
-  placeholder: Tell us what the application did.
-  validations:
-  required: true
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: "Steps to reproduce"
+      description: "Provide the exact sequence that causes the problem."
+      placeholder: |
+        1. Open PerfectFit
+        2. Select Orca Slicer
+        3. Open Pressure Advance
+        4. Click...
+        5. The application...
+    validations:
+      required: true
 
-* type: textarea
-  id: expected
-  attributes:
-  label: What did you expect to happen?
-  placeholder: Tell us what you expected the application to do.
-  validations:
-  required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: "How often does the problem occur?"
+      options:
+        - "Every time"
+        - "Most of the time"
+        - "Occasionally"
+        - "Only happened once"
+    validations:
+      required: true
 
-* type: textarea
-  id: reproduction
-  attributes:
-  label: Steps to reproduce
-  description: Provide the exact sequence that causes the problem.
-  placeholder: |
-  1. Open PerfectFit
-  2. Select Orca Slicer
-  3. Open Pressure Advance
-  4. Click...
-  5. The application...
-  validations:
-  required: true
+  - type: textarea
+    id: screenshots-and-logs
+    attributes:
+      label: "Screenshots, recordings, or logs"
+      description: "Drag supporting files into this box. Remove personal information before uploading."
+      placeholder: "Attach screenshots, recordings, or logs here."
+    validations:
+      required: false
 
-* type: textarea
-  id: frequency
-  attributes:
-  label: How often does it happen?
-  placeholder: "Every time, occasionally, or only once?"
-  validations:
-  required: true
-
-* type: textarea
-  id: screenshots
-  attributes:
-  label: Screenshots, video, or logs
-  description: Drag screenshots, recordings, or log files into this box. Remove personal information before uploading.
-  placeholder: Attach supporting files here.
-  validations:
-  required: false
-
-* type: textarea
-  id: additional-context
-  attributes:
-  label: Additional context
-  description: Include anything else that could help diagnose the problem.
-  validations:
-  required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: "Additional context"
+      description: "Include anything else that could help diagnose the problem."
+    validations:
+      required: false
