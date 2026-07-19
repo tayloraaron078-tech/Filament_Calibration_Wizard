@@ -9,6 +9,7 @@ import { renderHelp } from './ui/help';
 import { renderSettings } from './ui/settings';
 import { renderCard } from './ui/card';
 import { renderReport } from './ui/report';
+import { renderProfileWizard } from './ui/profileWizard';
 import type { CalibrationId } from './types';
 
 export type Route =
@@ -19,6 +20,7 @@ export type Route =
   | { view: 'wizard'; id: string; step: CalibrationId }
   | { view: 'card'; id: string }
   | { view: 'report'; id: string }
+  | { view: 'profile'; id: string }
   | { view: 'help'; term?: string }
   | { view: 'settings' };
 
@@ -50,6 +52,7 @@ export function parseHash(): Route {
     case 'wizard': return parts[1] && parts[2] ? { view: 'wizard', id: parts[1], step: parts[2] as CalibrationId } : { view: 'dashboard' };
     case 'card': return parts[1] ? { view: 'card', id: parts[1] } : { view: 'dashboard' };
     case 'report': return parts[1] ? { view: 'report', id: parts[1] } : { view: 'dashboard' };
+    case 'profile': return parts[1] ? { view: 'profile', id: parts[1] } : { view: 'dashboard' };
     case 'help': return { view: 'help', term: parts[1] };
     case 'settings': return { view: 'settings' };
     default: return { view: 'dashboard' };
@@ -69,6 +72,7 @@ async function route(): Promise<void> {
       case 'wizard': await renderWizard(outlet, r.id, r.step); break;
       case 'card': await renderCard(outlet, r.id); break;
       case 'report': await renderReport(outlet, r.id); break;
+      case 'profile': await renderProfileWizard(outlet, r.id); break;
       case 'help': renderHelp(outlet, r.term); break;
       case 'settings': renderSettings(outlet); break;
     }

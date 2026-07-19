@@ -53,12 +53,43 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
     ),
     h('div', { class: 'btn-row' },
       stage ? h('a', { class: 'btn btn-primary', href: `#/wizard/${p.id}/${stage}` }, `▶ Continue: ${getCalibration(stage).shortName}`) : null,
+      hasCalibratedValues(p) ? h('a', { class: `btn ${stage ? '' : 'btn-primary'}`, href: `#/profile/${p.id}` }, '🧵 Create slicer profile') : null,
       h('a', { class: 'btn', href: `#/report/${p.id}` }, '📄 Report'),
       h('a', { class: 'btn', href: `#/card/${p.id}` }, '🪪 Calibration card'),
       h('button', { class: 'btn', onClick: () => copyFinalsToClipboard(p) }, '📋 Copy final settings'),
       h('button', { class: 'btn', onClick: async () => download(`perfectfit-${p.id.slice(0, 8)}.json`, await exportProject(p, printer)) }, '⭳ Export JSON')
     )
   );
+
+  // --- calibration complete: profile call-to-action ---
+  if (!stage && hasCalibratedValues(p)) {
+    root.append(h('div', { class: 'callout callout-ok' },
+      h('p', { class: 'co-title' }, '🎉 Your filament calibration is complete.'),
+      h('p', {}, 'Turn the results into a ready-to-use filament profile for your slicer — PerfectFit clones a base profile, applies only your calibrated values, and can install it for you (desktop app).'),
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn btn-primary', href: `#/profile/${p.id}` }, '🧵 Create Slicer Profile'),
+        h('a', { class: 'btn', href: `#/report/${p.id}` }, '📄 View Report'))
+    ));
+  }
+
+  // --- generated profiles ---
+  if (p.generatedProfiles?.length) {
+    const gpCard = h('div', { class: 'card' }, h('h2', { style: 'margin-top:0' }, 'Generated slicer profiles'));
+    for (const rec of p.generatedProfiles) {
+      const last = rec.installHistory[rec.installHistory.length - 1];
+      gpCard.append(h('div', { class: 'eval-item' },
+        h('div', { class: 'eval-icon', 'aria-hidden': 'true' }, '🧵'),
+        h('div', { style: 'flex:1' },
+          h('h4', {}, rec.generatedProfileName),
+          h('p', { class: 'eval-meaning' },
+            `Based on “${rec.baseProfileName}” · ${rec.changedFields.length} value(s) applied · generated ${new Date(rec.generatedAt).toLocaleString()}`),
+          last ? h('p', { class: 'field-help' },
+            `Last action: ${last.mode}${last.success ? ' ✓' : ' ✖'} ${new Date(last.at).toLocaleString()}${last.backupId ? ` · backup ${last.backupId}` : ''}${last.verificationPassed ? ' · verified' : ''}`) : null),
+        h('a', { class: 'btn btn-sm', href: `#/profile/${p.id}` }, 'Open profile wizard')
+      ));
+    }
+    root.append(gpCard);
+  }
 
   // --- smart recommendations ---
   if (recs.length) {
@@ -151,6 +182,13 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
           e.detail ? h('div', { class: 'field-help' }, e.detail) : null)))
       : h('p', { class: 'field-help' }, 'Every value you set will be logged here so you can see how the profile evolved.')
   ));
+}
+
+/** At least one calibrated final exists — the profile generator has something to apply. */
+function hasCalibratedValues(p: CalibrationProject): boolean {
+  const f = p.finals;
+  return [f.nozzleTemp, f.flowRatio, f.pressureAdvance, f.retractionDistance, f.maxVolumetricSpeed]
+    .some(v => v !== undefined);
 }
 
 function dependentsOf(sid: CalibrationId): string[] {

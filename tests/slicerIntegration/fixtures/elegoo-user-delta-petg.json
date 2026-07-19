@@ -1,0 +1,34 @@
+{
+    "compatible_printers": [
+        "Elegoo OrangeStorm Giga 0.6 nozzle"
+    ],
+    "enable_pressure_advance": [
+        "1"
+    ],
+    "filament_flow_ratio": [
+        "0.96"
+    ],
+    "filament_max_volumetric_speed": [
+        "14"
+    ],
+    "filament_settings_id": [
+        "PolyMaker_Petg@Giga_0.6_Nozzle"
+    ],
+    "filament_vendor": [
+        "PolyMaker"
+    ],
+    "from": "User",
+    "inherits": "Generic PETG HF @System",
+    "is_custom_defined": "0",
+    "name": "PolyMaker_Petg@Giga_0.6_Nozzle",
+    "nozzle_temperature_range_high": [
+        "275"
+    ],
+    "nozzle_temperature_range_low": [
+        "240"
+    ],
+    "pressure_advance": [
+        "0.068"
+    ],
+    "version": "1.3.2.9"
+}

@@ -11,6 +11,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "PerfectFit — Filament Calibration Wizard",

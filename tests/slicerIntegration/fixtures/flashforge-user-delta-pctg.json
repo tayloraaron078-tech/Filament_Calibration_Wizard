@@ -1,0 +1,30 @@
+{
+    "filament_extruder_variant": [
+        "Direct Drive Standard"
+    ],
+    "filament_settings_id": [
+        "SpoolHaus PCTG @FF AD5M"
+    ],
+    "filament_type": [
+        "PCTG"
+    ],
+    "filament_vendor": [
+        "SpoolHaus"
+    ],
+    "from": "User",
+    "inherits": "Generic PETG HF @System",
+    "name": "SpoolHaus PCTG @FF AD5M",
+    "nozzle_temperature": [
+        "260"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "260"
+    ],
+    "textured_plate_temp": [
+        "90"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "90"
+    ],
+    "version": "2.3.0.3"
+}

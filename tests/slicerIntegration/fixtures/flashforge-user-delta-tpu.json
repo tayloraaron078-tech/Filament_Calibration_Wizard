@@ -1,0 +1,16 @@
+{
+    "filament_settings_id": [
+        "TPU 95A - HS"
+    ],
+    "from": "User",
+    "inherits": "Flashforge TPU 95A",
+    "is_custom_defined": "0",
+    "name": "TPU 95A - HS",
+    "nozzle_temperature": [
+        "235"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "235"
+    ],
+    "version": "2.1.1.0"
+}
