@@ -169,9 +169,13 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
     slicer: 'bambu',
     slicerLabel: 'Bambu Studio',
     version: '1.7+',
-    verifiedOn: '2026-07-18',
+    verifiedOn: '2026-07-19',
     docsUrl: 'https://wiki.bambulab.com/en/software/bambu-studio/manual-calibration',
-    calibrationMenuPath: 'Calibration tab (top of the main window)',
+    // NOTE: In current Bambu Studio (verified 2.7.x), the manual calibration
+    // tests are hidden while a Bambu Lab printer is selected. Reveal them by
+    // temporarily selecting any non–Bambu-Lab printer profile. This caveat is
+    // repeated as a per-test gotcha on every affected step below (issue #1).
+    calibrationMenuPath: 'Calibration menu (top bar) — see per-test notes: hidden while a Bambu Lab printer is selected',
     perTest: {
       temperature: {
         available: true, builtIn: true,
@@ -188,7 +192,10 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'Nozzle temperature (Other layers; optionally First layer)',
           scope: 'filament',
           note: 'Save as a NEW user preset — avoid overwriting Bambu system presets (they reset on updates anyway).'
-        }
+        },
+        gotchas: [
+          'Bambu Studio (verified 2.7.x) hides the built-in manual calibration tests while a Bambu Lab printer is selected, so the Temperature test may not appear. Workaround (user-confirmed): temporarily select any non–Bambu-Lab printer profile — the Calibration → Temperature option appears — create and run the tower, read the best block, then switch back to your Bambu printer to enter and save the value. (Bambu machines also offer their own on-device/automatic calibration; this wizard uses the manual test so you make the judgment.)'
+        ]
       },
       'flow-pass1': {
         available: true, builtIn: true,
@@ -205,7 +212,10 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'Flow ratio (decimal)',
           scope: 'filament',
           note: 'Save the user preset before running the fine pass.'
-        }
+        },
+        gotchas: [
+          'Bambu Studio (verified 2.7.x) hides its manual calibration tests while a Bambu Lab printer is selected, so Flow Rate may not appear. Workaround (user-confirmed): temporarily select any non–Bambu-Lab printer profile — Calibration → Flow Rate appears — run the coarse test, then switch back to your Bambu printer to save the new flow ratio.'
+        ]
       },
       'flow-pass2': {
         available: true, builtIn: true,
@@ -220,7 +230,10 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'Flow ratio',
           scope: 'filament',
           note: 'Overwrite the coarse value with the final one and save.'
-        }
+        },
+        gotchas: [
+          'Same visibility caveat as the coarse pass: if Flow Rate is missing while a Bambu Lab printer is selected (Bambu Studio 2.7.x), temporarily switch to a non–Bambu-Lab printer profile to reveal Calibration → Flow Rate, run the fine test, then switch back to your Bambu printer to save.'
+        ]
       },
       'pressure-advance': {
         available: true, builtIn: true,
@@ -237,7 +250,10 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'K factor',
           scope: 'filament',
           note: 'Bambu Studio stores K per filament/nozzle pairing; saving the calibration in the dialog attaches it to the filament preset.'
-        }
+        },
+        gotchas: [
+          'Bambu Studio (verified 2.7.x) hides its manual calibration tests while a Bambu Lab printer is selected, so Flow Dynamics may not appear. Workaround (user-confirmed): temporarily select any non–Bambu-Lab printer profile — Calibration → Flow Dynamics appears — run the Manual test, then switch back to your Bambu printer to save the K value. (Lidar-equipped X1/P1 can also run automatic Flow Dynamics on the machine.)'
+        ]
       },
       retraction: {
         available: false, builtIn: false,
