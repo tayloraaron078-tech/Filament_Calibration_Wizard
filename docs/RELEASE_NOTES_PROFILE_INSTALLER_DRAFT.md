@@ -65,15 +65,18 @@ automatic backup.
 
 | Slicer | Scan | Generate | Export | Auto-install |
 |---|---|---|---|---|
-| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ machinery tested; real-slicer manual test pending |
-| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ⏳ pending |
-| Snapmaker Orca 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
-| ElegooSlicer 1.5.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
-| Flash Studio (Orca-Flashforge) 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
+| ElegooSlicer 1.5.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E incl. slice + restore) |
+| Flash Studio (Orca-Flashforge) 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ install+appear+values+restore verified; slice test pending |
+| Snapmaker Orca 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ install+appear+restore verified (multi-tool U1); GUI value + slice pending |
+| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ install mechanics verified (local dir); active dir is cloud-linked, GUI+slice pending |
+| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ⏳ install mechanics verified (local dir); active dir is cloud-linked, GUI+slice pending |
 | macOS (all) | ⏳ unverified paths | ✅ | ✅ | ✖ disabled |
 
-Automatic installation is OFF by default for every slicer until its row in
-`docs/SLICER_PROFILE_TEST_MATRIX.md` records a passing real-slicer test.
+Automatic installation is enabled only where `docs/SLICER_PROFILE_TEST_MATRIX.md`
+records a full real-slicer pass. As of 2026-07-19 that is **ElegooSlicer 1.5.x on
+Windows** — installed, appeared, loaded every calibrated value, sliced a model,
+and restored cleanly. The other four are export-only pending the remaining
+checklist steps noted above.
 
 ### Safety
 
@@ -97,8 +100,9 @@ Automatic installation is OFF by default for every slicer until its row in
 
 ### Known Limitations
 
-- Automatic installation is not yet enabled for any slicer (pending manual
-  test matrix runs); export/import is the supported path today.
+- Automatic installation is enabled only for ElegooSlicer 1.5.x on Windows so
+  far (the one slicer with a full real-slicer pass). The other four are
+  export-only pending their remaining checklist steps.
 - macOS: slicer paths documented upstream but not yet verified; detection is
   best-effort and install stays disabled.
 - Cloud-synchronized preset folders (Bambu/Orca accounts): the slicer may

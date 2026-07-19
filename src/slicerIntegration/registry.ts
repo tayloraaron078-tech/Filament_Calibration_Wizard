@@ -114,9 +114,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // flip only with test-matrix evidence
+    directInstallVerified: false, // install mechanics verified into local dir only; active dir is cloud-linked
     verificationDate: '2026-07-19',
-    notes: ['Scanning and generation verified against Orca Slicer 2.4.2 on Windows 11.']
+    notes: ['Scanning + generation verified against Orca Slicer 2.4.2, Windows 11. Install/backup/verify/restore mechanics passed against the local default dir; the active preset dir is a cloud-linked account folder, deliberately not written to, and no in-GUI/slice test was run — direct install stays gated pending an account-dir-safe test.']
   },
   {
     slicerId: 'bambu',
@@ -124,9 +124,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: false, // install mechanics verified into local dir only; active dir is cloud-linked
     verificationDate: '2026-07-19',
-    notes: ['Verified against Bambu Studio 02.07.01.62 on Windows 11. Cloud account dirs get an extra warning.']
+    notes: ['Scanning + generation verified against Bambu Studio 02.07.01.62, Windows 11 (incl. dual-nozzle H2S presets). Install/backup/verify/restore mechanics passed against the local default dir; the active preset dir is a cloud-linked account folder, deliberately not written to, and no in-GUI/slice test was run — direct install stays gated pending an account-dir-safe test.']
   },
   {
     slicerId: 'snapmaker-orca',
@@ -134,9 +134,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: false, // install+appear+restore verified on multi-tool U1; GUI value display + slice pending
     verificationDate: '2026-07-19',
-    notes: ['Verified against Snapmaker Orca 01.10.01.50 on Windows 11.']
+    notes: ['Manual test on Snapmaker Orca 01.10.01.50, Windows 11 (multi-tool U1): transactional install + verified backup, preset appears and is selectable as a tool filament, on-disk values correct, backup restore returns baseline. In-GUI value display and slice test not yet run — direct install stays gated.']
   },
   {
     slicerId: 'elegoo',
@@ -144,9 +144,11 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Verified against ElegooSlicer 1.5.2.2 on Windows 11.']
+    notes: [
+      'Full manual E2E pass on ElegooSlicer 1.5.2.2, Windows 11: transactional install + verified backup, preset appears in the filament list, all calibrated values load correctly (temp/flow/PA/MVS), model slices cleanly, backup restore returns the directory byte-identical to baseline.'
+    ]
   },
   {
     slicerId: 'flash-studio',
@@ -154,9 +156,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: false, // install+appear+values+restore verified; slice test pending
     verificationDate: '2026-07-19',
-    notes: ['Verified against Orca-Flashforge (Flash Studio) 01.10.01.50 on Windows 11.']
+    notes: ['Manual test on Flash Studio (Orca-Flashforge) 01.10.01.50, Windows 11: transactional install + verified backup, preset appears in the filament list with correct values (flow 1.03, PA 0.041 enabled), backup restore returns baseline. Slice test not yet run — direct install stays gated pending it.']
   }
 ];
 

@@ -5,20 +5,28 @@ installation. Automatic installation stays **disabled by default** for every
 slicer until its row shows a passing manual install + restart + slice test
 (then flip `directInstallVerified` in `src/slicerIntegration/registry.ts`).
 
-Legend: ✅ verified · 🧪 machinery tested (temp-dir integration tests), real-slicer run pending · — not tested · n/a not applicable
+Legend: ✅ verified on the real slicer · 🧪 machinery tested (temp-dir integration tests) · — not tested · n/a not applicable
 
-| Slicer | Version | OS | Arch | Scan | Parse | Generate | Manual import | Auto install | Restart detect | Install verify | Backup restore | Multi-tool | Tester | Date | Notes |
+Real-slicer manual pass performed 2026-07-19 on Windows 11 x64 by Claude (computer-use), using the experimental build installed over 1.0.0. Each install used the production `install_core` (verified backup → temp write → verify → atomic move → re-verify) against the slicer's real preset directory, with the slicer closed. Directories were captured (SHA-256) before and restored + re-hashed after; every touched directory returned byte-identical to baseline and no test file remained anywhere.
+
+| Slicer | Version | OS | Arch | Scan | Parse | Generate | Install+backup | Appears in UI | Values in UI | Slice | Backup restore | Multi-tool | Auto-install enabled | Tester | Date |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Orca Slicer | 2.4.2 | Win 11 | x64 | ✅ | ✅ | ✅ | — | 🧪 | n/a¹ | 🧪 | 🧪 | n/a | Claude (dev machine) | 2026-07-19 | Detection/scan verified against real install (8+3 user presets found, account dir active). Round-trip fixture tests pass. |
-| Bambu Studio | 02.07.01.62 | Win 11 | x64 | ✅ | ✅ | ✅ | — | 🧪 | n/a¹ | 🧪 | 🧪 | ✅² | Claude (dev machine) | 2026-07-19 | 3 account dirs correctly resolved (69/21/0 presets; active dir from conf). Dual-nozzle H2S preset round-trips with per-nozzle patching. |
-| Snapmaker Orca | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | — | 🧪 | n/a¹ | 🧪 | 🧪 | — | Claude (dev machine) | 2026-07-19 | 5 user presets found. |
-| ElegooSlicer | 1.5.2.2 | Win 11 | x64 | ✅ | ✅ | ✅ | — | 🧪 | n/a¹ | 🧪 | 🧪 | n/a | Claude (dev machine) | 2026-07-19 | Scan: 3 user + 2 base + 310 system presets. |
-| Flash Studio (Orca-Flashforge) | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | — | 🧪 | n/a¹ | 🧪 | 🧪 | — | Claude (dev machine) | 2026-07-19 | 7 user presets found; presets without .info sidecars parse fine. |
-| any | any | macOS | — | — | ✅³ | ✅³ | — | — | — | — | — | — | — | — | macOS paths unverified; detection data marked likely, install stays off. |
+| ElegooSlicer | 1.5.2.2 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | **Yes** | Claude | 2026-07-19 |
+| Flash Studio (Orca-Flashforge) | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | No (slice pending) | Claude | 2026-07-19 |
+| Snapmaker Orca | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | on-disk✅ | — | ✅ | ✅ (selectable as tool 1 on U1) | No (GUI value + slice pending) | Claude | 2026-07-19 |
+| Orca Slicer | 2.4.2 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ (local dir) | —² | —² | — | ✅ | n/a | No (cloud-dir + GUI pending) | Claude | 2026-07-19 |
+| Bambu Studio | 02.07.01.62 | Win 11 | x64 | ✅ | ✅ | ✅¹ | ✅ (local dir) | —² | —² | — | ✅ | ✅ (dual-nozzle, fixtures) | No (cloud-dir + GUI pending) | Claude | 2026-07-19 |
+| any | any | macOS | — | — | ✅³ | ✅³ | — | — | — | — | — | — | No | — | — |
 
-¹ Restart detection: the profile appears after slicer restart (PrusaSlicer-lineage startup scan). "n/a" until the manual restart test is run per slicer.
-² Multi-tool: dual-nozzle array preservation + per-tool patching covered by automated fixture tests; a real dual-nozzle install has not been run.
-³ Parsing/generation are platform-independent (pure data transforms, covered by the automated fixture suite on every platform CI runs on).
+¹ Bambu dual-nozzle H2S per-nozzle patching + array preservation covered by automated fixture tests.
+² Orca and Bambu: the slicer's *active* preset dir is a cloud-linked account folder. To avoid any chance of cloud sync touching a test preset, only the local `default` dir was written (install/backup/verify/restore mechanics confirmed there). The slicer reads the account dir, so the preset was not exercised in-GUI. An account-dir-safe GUI+slice test is the remaining step.
+³ Parsing/generation are platform-independent pure data transforms (covered by the automated fixture suite).
+
+Evidence detail per slicer:
+- **ElegooSlicer — full pass.** Cloned a printer-compatible base (`PolyMaker_Petg@Giga_0.6_Nozzle`, delta preset inheriting `Generic PETG HF @System`). Installed; preset appeared under User presets; Material settings showed nozzle 213 °C (other layers), first-layer 255 °C correctly inherited (not calibrated), flow 1.03, PA 0.041 with pressure-advance enabled, MVS 17, PETG/PolyMaker/density preserved; a cube sliced to completion; backup restore removed both files and the dir returned byte-identical (6 files).
+- **Flash Studio — appears + values, slice pending.** Preset appeared under User presets; Material settings showed Type TPU, flow 1.03, PA 0.041 enabled — correct. Restore returned baseline (10 files).
+- **Snapmaker Orca (multi-tool U1) — appears + selectable, GUI value + slice pending.** Preset appeared and was selectable as tool 1's filament (validates the multi-tool path); on-disk values correct. Restore returned baseline (10 files).
+- **Orca Slicer / Bambu Studio — install mechanics only.** Install/backup/verify/restore into the local `default` dir succeeded; account dirs never touched and remained byte-identical (Orca 16/16, Bambu 138/138).
 
 ## Automated coverage backing the 🧪 cells
 
