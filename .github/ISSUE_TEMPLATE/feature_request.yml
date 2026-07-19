@@ -1,0 +1,97 @@
+name: Feature request
+description: Suggest an improvement or new capability for PerfectFit
+title: "[Feature]: "
+labels:
+
+* enhancement
+  body:
+
+* type: markdown
+  attributes:
+  value: |
+  Thanks for suggesting an improvement!
+
+  ```
+  PerfectFit is focused on guiding users through filament calibration in Orca Slicer and Bambu Studio. Feature ideas that support that purpose are especially welcome.
+  ```
+
+* type: checkboxes
+  id: checks
+  attributes:
+  label: Before submitting
+  options:
+  - label: I searched existing issues and did not find the same suggestion.
+  required: true
+  - label: This feature relates to filament calibration or the PerfectFit workflow.
+  required: true
+
+* type: textarea
+  id: problem
+  attributes:
+  label: What problem would this solve?
+  description: Describe the difficulty, missing workflow, or recurring frustration.
+  placeholder: Explain the problem before describing your proposed solution.
+  validations:
+  required: true
+
+* type: textarea
+  id: solution
+  attributes:
+  label: Proposed solution
+  description: Describe how you would like the feature to work.
+  placeholder: Walk us through the ideal behavior.
+  validations:
+  required: true
+
+* type: dropdown
+  id: area
+  attributes:
+  label: Area of the application
+  options:
+  - General workflow
+  - Orca Slicer instructions
+  - Bambu Studio instructions
+  - Pressure Advance
+  - Flow Rate
+  - Retraction
+  - Maximum Volumetric Speed
+  - Filament profiles or profile installation
+  - Coach Mode
+  - Results or record keeping
+  - User interface or accessibility
+  - Installation or updates
+  - Other
+  validations:
+  required: true
+
+* type: textarea
+  id: benefit
+  attributes:
+  label: Who would benefit?
+  description: Explain whether this would help beginners, advanced users, a specific printer type, or most users.
+  validations:
+  required: true
+
+* type: textarea
+  id: alternatives
+  attributes:
+  label: Alternatives considered
+  description: Describe any current workaround or alternative approach.
+  validations:
+  required: false
+
+* type: textarea
+  id: examples
+  attributes:
+  label: Examples or mockups
+  description: Add screenshots, sketches, links, or examples that help explain the idea.
+  validations:
+  required: false
+
+* type: checkboxes
+  id: contribution
+  attributes:
+  label: Contribution
+  options:
+  - label: I may be willing to help implement or test this feature.
+  required: false
