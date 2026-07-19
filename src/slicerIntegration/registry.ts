@@ -114,9 +114,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // flip only with test-matrix evidence
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Scanning and generation verified against Orca Slicer 2.4.2 on Windows 11.']
+    notes: ['Full manual E2E pass on Orca Slicer 2.4.2, Windows 11, in the real cloud-linked account dir (signed in to Orca Cloud): transactional install + verified backup, preset appears in the filament list (Elegoo OrangeStorm Giga 0.6 nozzle), model slices cleanly, backup restore returns the account directory byte-identical to baseline. Cloud caveat: the slicer may later sync/duplicate/re-id presets in an account dir — surfaced as a user warning, not a blocker.']
   },
   {
     slicerId: 'bambu',
@@ -124,9 +124,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Verified against Bambu Studio 02.07.01.62 on Windows 11. Cloud account dirs get an extra warning.']
+    notes: ['Full manual E2E pass on Bambu Studio 02.07.01.62, Windows 11, in the real cloud-linked account dir (signed in as user_3964423668): transactional install + verified backup, preset appears under Custom presets with correct values (Type PCTG, flow 1.03), dual-nozzle array preserved (tool 0 patched, tool 1 untouched: temp ["213","260"]), model slices cleanly, backup restore returns the account directory byte-identical to baseline. Cloud caveat: the slicer may later sync/duplicate/re-id presets in an account dir — surfaced as a user warning, not a blocker.']
   },
   {
     slicerId: 'snapmaker-orca',
@@ -134,9 +134,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Verified against Snapmaker Orca 01.10.01.50 on Windows 11.']
+    notes: ['Full manual E2E pass on Snapmaker Orca 01.10.01.50, Windows 11 (multi-tool U1): transactional install + verified backup, preset appears and is selectable as tool 1\'s filament, on-disk values correct (temp 213 / flow 1.03 / PA 0.041), model slices cleanly on the U1, backup restore returns the directory byte-identical to baseline.']
   },
   {
     slicerId: 'elegoo',
@@ -144,9 +144,11 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Verified against ElegooSlicer 1.5.2.2 on Windows 11.']
+    notes: [
+      'Full manual E2E pass on ElegooSlicer 1.5.2.2, Windows 11: transactional install + verified backup, preset appears in the filament list, all calibrated values load correctly (temp/flow/PA/MVS), model slices cleanly, backup restore returns the directory byte-identical to baseline.'
+    ]
   },
   {
     slicerId: 'flash-studio',
@@ -154,9 +156,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false,
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Verified against Orca-Flashforge (Flash Studio) 01.10.01.50 on Windows 11.']
+    notes: ['Full manual E2E pass on Flash Studio (Orca-Flashforge) 01.10.01.50, Windows 11: transactional install + verified backup, preset appears in the filament list with correct values (flow 1.03, PA 0.041 enabled), model slices cleanly, backup restore returns the directory byte-identical to baseline.']
   }
 ];
 

@@ -65,15 +65,20 @@ automatic backup.
 
 | Slicer | Scan | Generate | Export | Auto-install |
 |---|---|---|---|---|
-| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ machinery tested; real-slicer manual test pending |
-| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ⏳ pending |
-| Snapmaker Orca 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
-| ElegooSlicer 1.5.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
-| Flash Studio (Orca-Flashforge) 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ⏳ pending |
+| ElegooSlicer 1.5.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E incl. slice + restore) |
+| Flash Studio (Orca-Flashforge) 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E incl. slice + restore) |
+| Snapmaker Orca 01.10.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E on multi-tool U1 incl. slice + restore) |
+| Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir incl. slice + restore) |
+| Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir; real dual-nozzle tool-0 patch; slice + restore) |
 | macOS (all) | ⏳ unverified paths | ✅ | ✅ | ✖ disabled |
 
-Automatic installation is OFF by default for every slicer until its row in
-`docs/SLICER_PROFILE_TEST_MATRIX.md` records a passing real-slicer test.
+Automatic installation is enabled on **all five slicers on Windows** — each was
+installed into its real active preset folder (Orca and Bambu while signed in to
+their clouds), showed the preset with the calibrated values, sliced a model, and
+restored byte-identical. See `docs/SLICER_PROFILE_TEST_MATRIX.md` for per-slicer
+evidence. Cloud caveat (Orca/Bambu accounts): a signed-in slicer may later sync,
+duplicate, or re-id a locally installed preset — surfaced as a user warning, not
+a blocker. macOS remains disabled pending path verification.
 
 ### Safety
 
@@ -97,8 +102,11 @@ Automatic installation is OFF by default for every slicer until its row in
 
 ### Known Limitations
 
-- Automatic installation is not yet enabled for any slicer (pending manual
-  test matrix runs); export/import is the supported path today.
+- Automatic installation is enabled for all five slicers on Windows (each with a
+  full real-slicer pass). macOS is export-only pending path verification.
+- Cloud caveat (Orca/Bambu with a signed-in account): the slicer may later sync,
+  duplicate, or re-identify a locally installed preset. This is cosmetic (not
+  data loss) and is surfaced as a warning when installing into an account dir.
 - macOS: slicer paths documented upstream but not yet verified; detection is
   best-effort and install stays disabled.
 - Cloud-synchronized preset folders (Bambu/Orca accounts): the slicer may
