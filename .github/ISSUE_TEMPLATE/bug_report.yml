@@ -44,6 +44,7 @@ body:
         - "Windows 10"
         - "macOS on Apple silicon"
         - "macOS on Intel"
+        - "Linux"
         - "Other"
     validations:
       required: true
@@ -52,8 +53,8 @@ body:
     id: os-version
     attributes:
       label: "Operating system version"
-      description: "Include the Windows build number or macOS version when possible."
-      placeholder: "Example: Windows 11 24H2, build 26100"
+      description: "Include the Windows build number, macOS version, or Linux distro/version when possible."
+      placeholder: "Example: Windows 11 24H2 build 26100, macOS 15.5, or Ubuntu 22.04"
     validations:
       required: false
 

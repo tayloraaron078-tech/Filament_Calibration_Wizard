@@ -1,7 +1,7 @@
 {
   "name": "perfectfit-filament-calibration-wizard",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "PerfectFit — a local-first guided wizard for calibrating filament profiles for Orca Slicer and Bambu Studio.",
   "type": "module",
   "scripts": {

@@ -71,6 +71,7 @@ automatic backup.
 | Orca Slicer 2.4.x (Windows) | ✅ verified | ✅ verified | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir incl. slice + restore) |
 | Bambu Studio 02.07.x (Windows) | ✅ verified | ✅ verified (incl. dual-nozzle) | ✅ | ✅ **verified & enabled** (full E2E in real cloud account dir; real dual-nozzle tool-0 patch; slice + restore) |
 | macOS (all) | ⏳ unverified paths | ✅ | ✅ | ✖ disabled |
+| Linux desktop package | ⏳ unverified paths | ✅ | ✅ | ✖ disabled |
 
 Automatic installation is enabled on **all five slicers on Windows** — each was
 installed into its real active preset folder (Orca and Bambu while signed in to
@@ -78,7 +79,7 @@ their clouds), showed the preset with the calibrated values, sliced a model, and
 restored byte-identical. See `docs/SLICER_PROFILE_TEST_MATRIX.md` for per-slicer
 evidence. Cloud caveat (Orca/Bambu accounts): a signed-in slicer may later sync,
 duplicate, or re-id a locally installed preset — surfaced as a user warning, not
-a blocker. macOS remains disabled pending path verification.
+a blocker. macOS remains disabled pending path verification. Linux packages are now built for desktop access, but native slicer detection/install remains unverified and disabled pending Linux-specific validation.
 
 ### Safety
 
@@ -103,7 +104,7 @@ a blocker. macOS remains disabled pending path verification.
 ### Known Limitations
 
 - Automatic installation is enabled for all five slicers on Windows (each with a
-  full real-slicer pass). macOS is export-only pending path verification.
+  full real-slicer pass). macOS and Linux are export-only pending path verification.
 - Cloud caveat (Orca/Bambu with a signed-in account): the slicer may later sync,
   duplicate, or re-identify a locally installed preset. This is cosmetic (not
   data loss) and is surfaced as a warning when installing into an account dir.
@@ -117,7 +118,7 @@ a blocker. macOS remains disabled pending path verification.
   export.
 - Bed temperature is not patched (plate-type-specific keys in Orca-family
   slicers).
-- Linux is untested and unsupported for detection/install.
+- Linux packages are produced for release, but Linux slicer detection/install is untested and unsupported pending a Linux validation pass.
 
 ### Upgrade Notes
 
