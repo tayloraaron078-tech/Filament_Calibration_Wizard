@@ -1,0 +1,8 @@
+{
+    "preset_kind": "filament",
+    "schema": "totally-different-slicer/v3",
+    "settings": {
+        "temperature_celsius": 240,
+        "flow_percent": 97
+    }
+}

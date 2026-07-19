@@ -1,0 +1,32 @@
+{
+    "name": "Synthetic PETG With Future Fields",
+    "from": "User",
+    "inherits": "Generic PETG @System",
+    "version": "9.9.9.9",
+    "filament_settings_id": [
+        "Synthetic PETG With Future Fields"
+    ],
+    "filament_type": [
+        "PETG"
+    ],
+    "filament_vendor": [
+        "SyntheticVendor"
+    ],
+    "nozzle_temperature": [
+        "245"
+    ],
+    "filament_flow_ratio": [
+        "0.95"
+    ],
+    "future_quantum_extrusion_mode": [
+        "entangled"
+    ],
+    "future_nested_object": {
+        "depth": 2,
+        "values": [1, 2, 3],
+        "flag": true
+    },
+    "future_plain_string": "keep me exactly",
+    "future_number": 42.5,
+    "future_null": null
+}
