@@ -12,8 +12,8 @@ Real-slicer manual pass performed 2026-07-19 on Windows 11 x64 by Claude (comput
 | Slicer | Version | OS | Arch | Scan | Parse | Generate | Install+backup | Appears in UI | Values in UI | Slice | Backup restore | Multi-tool | Auto-install enabled | Tester | Date |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ElegooSlicer | 1.5.2.2 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a | **Yes** | Claude | 2026-07-19 |
-| Flash Studio (Orca-Flashforge) | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | No (slice pending) | Claude | 2026-07-19 |
-| Snapmaker Orca | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | on-disk✅ | — | ✅ | ✅ (selectable as tool 1 on U1) | No (GUI value + slice pending) | Claude | 2026-07-19 |
+| Flash Studio (Orca-Flashforge) | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | **Yes** | Claude | 2026-07-19 |
+| Snapmaker Orca | 01.10.01.50 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ | ✅ | on-disk✅ | ✅ | ✅ | ✅ (sliced on U1 with preset on tool 1) | **Yes** | Claude | 2026-07-19 |
 | Orca Slicer | 2.4.2 | Win 11 | x64 | ✅ | ✅ | ✅ | ✅ (local dir) | —² | —² | — | ✅ | n/a | No (cloud-dir + GUI pending) | Claude | 2026-07-19 |
 | Bambu Studio | 02.07.01.62 | Win 11 | x64 | ✅ | ✅ | ✅¹ | ✅ (local dir) | —² | —² | — | ✅ | ✅ (dual-nozzle, fixtures) | No (cloud-dir + GUI pending) | Claude | 2026-07-19 |
 | any | any | macOS | — | — | ✅³ | ✅³ | — | — | — | — | — | — | No | — | — |
@@ -24,8 +24,8 @@ Real-slicer manual pass performed 2026-07-19 on Windows 11 x64 by Claude (comput
 
 Evidence detail per slicer:
 - **ElegooSlicer — full pass.** Cloned a printer-compatible base (`PolyMaker_Petg@Giga_0.6_Nozzle`, delta preset inheriting `Generic PETG HF @System`). Installed; preset appeared under User presets; Material settings showed nozzle 213 °C (other layers), first-layer 255 °C correctly inherited (not calibrated), flow 1.03, PA 0.041 with pressure-advance enabled, MVS 17, PETG/PolyMaker/density preserved; a cube sliced to completion; backup restore removed both files and the dir returned byte-identical (6 files).
-- **Flash Studio — appears + values, slice pending.** Preset appeared under User presets; Material settings showed Type TPU, flow 1.03, PA 0.041 enabled — correct. Restore returned baseline (10 files).
-- **Snapmaker Orca (multi-tool U1) — appears + selectable, GUI value + slice pending.** Preset appeared and was selectable as tool 1's filament (validates the multi-tool path); on-disk values correct. Restore returned baseline (10 files).
+- **Flash Studio — full pass.** Preset appeared under User presets; Material settings showed Type TPU, flow 1.03, PA 0.041 enabled — correct; a cube sliced to completion (Preview toolpath + estimates); restore returned baseline (10 files).
+- **Snapmaker Orca (multi-tool U1) — full pass.** Preset appeared and was selectable as tool 1's filament (validates the multi-tool path); on-disk values correct; a cube sliced to completion on the U1 (G-code generated, ~26 min estimate); restore returned baseline (10 files). In-GUI value display was not separately opened (the settings pencil opened the parent preset), but the successful slice exercises the applied values.
 - **Orca Slicer / Bambu Studio — install mechanics only.** Install/backup/verify/restore into the local `default` dir succeeded; account dirs never touched and remained byte-identical (Orca 16/16, Bambu 138/138).
 
 ## Automated coverage backing the 🧪 cells

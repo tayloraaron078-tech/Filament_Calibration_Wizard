@@ -18,12 +18,16 @@ touched dir was SHA-256 hashed before and restored + re-hashed after.
   slices to completion → restore returns dir byte-identical. **Flipped
   `directInstallVerified: true` for elegoo 1.5.x/windows** — first fully proven
   adapter.
-- **Flash Studio (Orca-Flashforge) 01.10.01.50** — install + appears + GUI
-  values correct (flow 1.03, PA 0.041 enabled) + restore. Slice not run →
-  stays gated.
-- **Snapmaker Orca 01.10.01.50 (multi-tool U1)** — install + appears +
-  selectable as tool 1 (multi-tool path works) + restore; on-disk values
-  correct. GUI value display + slice not run → stays gated.
+- **Flash Studio (Orca-Flashforge) 01.10.01.50 — FULL PASS** (slice added in a
+  follow-up pass). Install + appears + GUI values correct (flow 1.03, PA 0.041
+  enabled) + cube slices to completion + restore byte-identical. **Flipped
+  `directInstallVerified: true`.**
+- **Snapmaker Orca 01.10.01.50 (multi-tool U1) — FULL PASS** (slice added in a
+  follow-up pass). Install + appears + selectable as tool 1 + cube slices to
+  completion on the U1 (~26 min G-code) + restore byte-identical; on-disk
+  values correct. **Flipped `directInstallVerified: true`.** (In-GUI value
+  display not separately opened — the settings pencil opens the parent preset —
+  but the successful slice exercises the applied values.)
 - **Orca 2.4.2 / Bambu 02.07.01.62** — install/backup/verify/restore mechanics
   passed into the **local `default`** dir only. Their active dirs are
   cloud-linked account folders; deliberately not written (cloud-safety), so no

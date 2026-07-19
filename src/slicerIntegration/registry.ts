@@ -134,9 +134,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // install+appear+restore verified on multi-tool U1; GUI value display + slice pending
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Manual test on Snapmaker Orca 01.10.01.50, Windows 11 (multi-tool U1): transactional install + verified backup, preset appears and is selectable as a tool filament, on-disk values correct, backup restore returns baseline. In-GUI value display and slice test not yet run — direct install stays gated.']
+    notes: ['Full manual E2E pass on Snapmaker Orca 01.10.01.50, Windows 11 (multi-tool U1): transactional install + verified backup, preset appears and is selectable as tool 1\'s filament, on-disk values correct (temp 213 / flow 1.03 / PA 0.041), model slices cleanly on the U1, backup restore returns the directory byte-identical to baseline.']
   },
   {
     slicerId: 'elegoo',
@@ -156,9 +156,9 @@ export const VERIFIED_VERSIONS: VerifiedSlicerVersion[] = [
     platforms: ['windows'],
     profileScanVerified: true,
     profileGenerationVerified: true,
-    directInstallVerified: false, // install+appear+values+restore verified; slice test pending
+    directInstallVerified: true,
     verificationDate: '2026-07-19',
-    notes: ['Manual test on Flash Studio (Orca-Flashforge) 01.10.01.50, Windows 11: transactional install + verified backup, preset appears in the filament list with correct values (flow 1.03, PA 0.041 enabled), backup restore returns baseline. Slice test not yet run — direct install stays gated pending it.']
+    notes: ['Full manual E2E pass on Flash Studio (Orca-Flashforge) 01.10.01.50, Windows 11: transactional install + verified backup, preset appears in the filament list with correct values (flow 1.03, PA 0.041 enabled), model slices cleanly, backup restore returns the directory byte-identical to baseline.']
   }
 ];
 
