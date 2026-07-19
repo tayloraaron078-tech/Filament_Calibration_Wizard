@@ -66,8 +66,9 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
 /// Create and verify a backup covering `paths` (files that are about to be
 /// created or replaced). Files that do not exist yet are recorded with
 /// `existed_before: false` so restore knows to delete them.
+/// `all_backups_root` is injected so integration tests can use a temp dir.
 pub fn create_backup(
-    app: &tauri::AppHandle,
+    all_backups_root: &Path,
     slicer_id: &str,
     slicer_version: Option<String>,
     profile_name: &str,
@@ -76,7 +77,7 @@ pub fn create_backup(
 ) -> Result<ProfileBackupManifest, String> {
     let now = now_unix();
     let backup_id = format!("{now}-{}", std::process::id());
-    let root = backups_root(app)?.join(slicer_id).join(&backup_id);
+    let root = all_backups_root.join(slicer_id).join(&backup_id);
     let files_dir = root.join("files");
     std::fs::create_dir_all(&files_dir).map_err(|e| format!("Cannot create backup dir: {e}"))?;
 
@@ -153,21 +154,17 @@ fn load_manifest(app: &tauri::AppHandle, backup_id: &str) -> Result<ProfileBacku
 
 /// Restore a backup: copy back every file that existed before (after checksum
 /// verification of the backed-up copy) and delete files that did not exist.
-/// Original paths are re-validated against the slicer data roots.
+/// Original paths are re-validated against `allowed_root` (the slicer's data
+/// directory in production; a temp directory in integration tests).
 pub fn restore_backup_inner(
-    app: &tauri::AppHandle,
     manifest: &ProfileBackupManifest,
+    allowed_root: &Path,
 ) -> Result<(Vec<String>, Vec<String>), String> {
-    let data_root = security::platform_data_root()?;
-    let slicer = super::descriptor(&manifest.slicer_id)?;
-    let allowed_root = data_root.join(slicer.data_dir_name);
-    let _ = app;
-
     let mut restored = Vec::new();
     let mut deleted = Vec::new();
     for f in &manifest.files {
         let original = PathBuf::from(&f.original_path);
-        security::ensure_target_under(&allowed_root, &original)?;
+        security::ensure_target_under(allowed_root, &original)?;
         security::validate_preset_extension(
             original.file_name().and_then(|n| n.to_str()).unwrap_or(""),
         )?;
@@ -255,7 +252,10 @@ pub fn restore_profile_backup(
     backup_id: String,
 ) -> Result<RestoreResult, String> {
     let manifest = load_manifest(&app, &backup_id)?;
-    let (restored_files, deleted_files) = restore_backup_inner(&app, &manifest)?;
+    let data_root = security::platform_data_root()?;
+    let slicer = super::descriptor(&manifest.slicer_id)?;
+    let allowed_root = data_root.join(slicer.data_dir_name);
+    let (restored_files, deleted_files) = restore_backup_inner(&manifest, &allowed_root)?;
     Ok(RestoreResult {
         restored_files,
         deleted_files,
