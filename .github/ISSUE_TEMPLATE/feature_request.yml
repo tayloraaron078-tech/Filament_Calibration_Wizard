@@ -3,7 +3,7 @@ description: Suggest an improvement or new capability for PerfectFit
 title: "[Feature]: "
 labels:
 
-* enhancement
+enhancement
   body:
 
 * type: markdown
