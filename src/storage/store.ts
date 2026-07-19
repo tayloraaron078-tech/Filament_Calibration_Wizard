@@ -5,7 +5,11 @@ import type {
 import { DEFAULT_ORDER } from '../data/calibrations';
 import { idb } from './db';
 
-export const SCHEMA_VERSION = 1;
+/**
+ * v1: original release.
+ * v2: adds CalibrationProject.generatedProfiles (slicer profile installer).
+ */
+export const SCHEMA_VERSION = 2;
 
 // --- ids -------------------------------------------------------------------
 

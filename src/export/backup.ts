@@ -110,18 +110,20 @@ export async function importBackup(json: string): Promise<ImportResult> {
   };
 }
 
-/** Migrate older schema versions forward. v1 is current; hook for the future. */
+/** Migrate older schema versions forward. v2 is current. */
 export function migrate(file: BackupFile): BackupFile {
   const v = file.schemaVersion ?? 1;
   let out = file;
-  if (v < 1) {
-    out = { ...out, schemaVersion: 1 };
+  if (v < 2) {
+    // v1 → v2: generatedProfiles added; absent means none.
+    out = { ...out, schemaVersion: 2 };
   }
   // Defensive normalization regardless of version:
   for (const p of out.projects ?? []) {
     p.timeline = Array.isArray(p.timeline) ? p.timeline : [];
     p.finals = p.finals ?? {};
     p.archived = !!p.archived;
+    p.generatedProfiles = Array.isArray(p.generatedProfiles) ? p.generatedProfiles : [];
     p.stepOrder = Array.isArray(p.stepOrder) && p.stepOrder.length ? p.stepOrder : p.stepOrder;
     for (const key of Object.keys(p.steps ?? {})) {
       const st = (p.steps as Record<string, { history?: unknown[] }>)[key];

@@ -103,6 +103,11 @@ export interface CalibrationProject {
   archived: boolean;
   /** Final chosen values, denormalized for dashboard display. */
   finals: FinalValues;
+  /**
+   * Slicer profiles generated from this calibration (schema v2+).
+   * Absent on v1 projects; normalized to [] on load/import.
+   */
+  generatedProfiles?: import('./slicerIntegration/types').GeneratedProfileRecord[];
 }
 
 export interface FinalValues {

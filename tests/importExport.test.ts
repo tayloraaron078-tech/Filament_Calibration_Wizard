@@ -126,10 +126,11 @@ describe('data migration', () => {
       printers: []
     } as unknown as BackupFile;
     const out = migrate(file);
-    expect(out.schemaVersion).toBe(1);
+    expect(out.schemaVersion).toBe(2);
     const p = out.projects[0];
     expect(Array.isArray(p.timeline)).toBe(true);
     expect(p.finals).toBeDefined();
+    expect(p.generatedProfiles).toEqual([]);
     expect(Array.isArray((p.steps as Record<string, { history: unknown[] }>).temperature.history)).toBe(true);
   });
 });
