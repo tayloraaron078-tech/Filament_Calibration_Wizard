@@ -96,14 +96,18 @@ export function generateProfile(
 
   const serialized = serializePreset(data);
 
-  // base_id: the base profile's own setting/base id when the sidecar has one
-  // (system bases carry setting_id inside the preset itself).
+  // base_id links the new preset to the STOCK/system ancestor it derives from.
+  // - Cloning a system (stock) preset: use that preset's own setting_id.
+  // - Cloning a user/cloud preset (Advanced mode): do NOT reuse the user
+  //   preset's cloud setting_id (a "PFUS…" user id) — that ties the clone to
+  //   another user preset and Bambu hides it behind that parent. Chain to the
+  //   parent's own base_id (its system ancestor) instead, or leave empty.
   const baseRaw = parsedBase.profile.rawProfile as Record<string, unknown>;
-  const baseId =
-    infoValue(parsedBase.profile.infoSidecar, 'setting_id') ||
-    (typeof baseRaw.setting_id === 'string' ? baseRaw.setting_id : null) ||
-    infoValue(parsedBase.profile.infoSidecar, 'base_id') ||
-    null;
+  const baseId = parsedBase.profile.sourceType === 'system'
+    ? ((typeof baseRaw.setting_id === 'string' ? baseRaw.setting_id : null)
+        || infoValue(parsedBase.profile.infoSidecar, 'setting_id')
+        || null)
+    : (infoValue(parsedBase.profile.infoSidecar, 'base_id') || null);
 
   return {
     slicerId: request.slicerId,

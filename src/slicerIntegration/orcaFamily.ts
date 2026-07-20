@@ -254,6 +254,22 @@ export function formatPresetNumber(n: number): string {
  *   except settings where "nil" would be invalid (flow/temp), which replicate
  *   the patched value.
  */
+/**
+ * A fresh Bambu-style custom filament id: `P` + 7 hex, unique per generation
+ * (FNV-1a over the name plus time/random). Bambu-lineage slicers key filaments
+ * by `filament_id`; giving the clone a new id prevents it from being hidden
+ * behind a cloud-synced parent that shares the id.
+ */
+export function freshFilamentId(seed: string): string {
+  let h = 2166136261 >>> 0;
+  const s = `${seed}|${Date.now()}|${Math.random()}`;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return 'P' + h.toString(16).padStart(8, '0').slice(0, 7);
+}
+
 export function cloneAndPatch(args: {
   base: ParsedFilamentProfile;
   newName: string;
@@ -281,6 +297,14 @@ export function cloneAndPatch(args: {
   // Cloud/account identity of the source must never leak into the clone.
   delete data.setting_id;
   delete data.user_id;
+  // Bambu-lineage slicers dedupe filament presets by `filament_id` when signed
+  // in: a clone that keeps its parent's id is hidden behind the cloud-synced
+  // parent (verified in Bambu Studio 2.7.x — the clone never appears in the
+  // filament list). Assign a fresh unique id so the generated preset shows as
+  // its own filament, mirroring Bambu's "duplicate filament" behavior.
+  if (typeof data.filament_id === 'string' && data.filament_id) {
+    data.filament_id = freshFilamentId(newName);
+  }
 
   // Keys that may not hold "nil" (the slicer requires a concrete value).
   const NO_NIL = new Set(['nozzle_temperature', 'nozzle_temperature_initial_layer', 'filament_flow_ratio', 'filament_max_volumetric_speed', 'pressure_advance']);

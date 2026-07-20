@@ -320,13 +320,20 @@ async function renderProfilesStage(
   };
 
   if (!st.advanced) {
+    card.append(h('p', { class: 'field-help' },
+      'Suggested baselines are stock (system) profiles for your material, compatible with the selected printer. PerfectFit clones a clean stock profile and applies only your calibrated values.'));
+    if (rec.usedFallback) {
+      card.append(h('div', { class: 'callout callout-warn' },
+        h('p', { class: 'co-title' }, 'No stock profile matched — showing closest compatible profiles'),
+        h('p', {}, `No system/stock ${project.filament.material} profile for this printer was found in the scan${bridge.isDesktop() ? '' : ' (stock profiles need the desktop app)'}. The suggestions below are the closest compatible profiles instead; review them, or use Advanced to pick any profile.`)));
+    }
     if (rec.best) {
       card.append(recommendedCard(rec.best, true, choose));
       for (const alt of rec.alternatives) card.append(recommendedCard(alt, false, choose));
     } else {
       card.append(h('div', { class: 'callout callout-warn' },
         h('p', { class: 'co-title' }, 'No compatible profile found'),
-        h('p', {}, `None of the ${st.scan.profiles.length} scanned presets match your calibrated material (${project.filament.material}). Switch to advanced selection to pick any profile, or choose a generic profile of the right material in your slicer first.`)));
+        h('p', {}, `None of the ${st.scan.profiles.length} scanned presets are a stock ${project.filament.material} profile compatible with this printer. Switch to advanced selection to pick any profile, or add a generic ${project.filament.material} profile for this printer in your slicer first.`)));
     }
     card.append(h('div', { class: 'btn-row' },
       h('button', { class: 'btn btn-ghost', onClick: () => { st.advanced = true; rerender(); } }, '⚙ Advanced: show all profiles'),

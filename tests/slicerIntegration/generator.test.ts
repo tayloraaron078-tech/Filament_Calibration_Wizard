@@ -105,15 +105,23 @@ describe('clone-and-patch round trips (all slicer fixtures)', () => {
       expect(reparsed.version).toEqual(original.version);
       expect(reparsed.inherits).toEqual(original.inherits);
 
-      // 5. every unrelated field survives byte-identical
+      // 5. every unrelated field survives byte-identical. filament_id is
+      //    deliberately regenerated (Bambu dedupes clones by filament_id).
       const patchedKeys = new Set([
         ...patches.map(p => p.presetKey),
         ...patches.flatMap(p => (p.companions ?? []).map(c => c.presetKey)),
-        'name', 'from', 'filament_settings_id', 'setting_id', 'user_id'
+        'name', 'from', 'filament_settings_id', 'setting_id', 'user_id', 'filament_id'
       ]);
       for (const key of Object.keys(original)) {
         if (patchedKeys.has(key)) continue;
         expect(reparsed[key], `field ${key} must be preserved`).toEqual(original[key]);
+      }
+
+      // 5b. if the base had a filament_id, the clone gets a fresh unique one
+      //     (so Bambu doesn't hide it behind the cloud-synced parent).
+      if (typeof original.filament_id === 'string' && original.filament_id) {
+        expect(reparsed.filament_id).not.toEqual(original.filament_id);
+        expect(String(reparsed.filament_id)).toMatch(/^P[0-9a-f]{7}$/);
       }
 
       // 6. the base was not mutated
@@ -195,23 +203,46 @@ describe('clone-and-patch round trips (all slicer fixtures)', () => {
     expect(reparsed.filament_max_volumetric_speed).toEqual(['15']);
   });
 
-  it('writes a fresh .info sidecar with create semantics and the base id', () => {
+  it('writes a fresh .info sidecar; a USER base chains to its system ancestor base_id', () => {
     const adapter = getAdapter('orca');
     const raw = fixtureRaw('orca-user-delta-pla.json', {
+      dir_kind: 'user',
       info: 'sync_info = \nuser_id = 1f187aab\nsetting_id = ba3183ad\nbase_id = EPLAEOSG00\nupdated_time = 1781473826\n'
     });
     const parsed = adapter.parseProfile(
       { kind: 'detected', fileName: raw.file_name, json: raw.json, infoText: raw.info, filePath: raw.path },
       raw
     )!;
-    const project = makeProject();
     const generated = generateProfile({
       slicerId: 'orca', baseProfile: parsed.profile, newName: 'PF Info Test',
-      patches: buildPatchesFromProject(project), targetExtruderIndex: 0,
-      applyToAllExtruders: false, project
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
     }, parsed);
     expect(generated.infoText).toContain('sync_info = create');
     expect(generated.infoText).toContain('user_id = \n');
-    expect(generated.infoText).toContain('base_id = ba3183ad'); // base's own setting_id
+    // Cloning a USER preset must NOT reuse its cloud setting_id (ba3183ad);
+    // it chains to the base's own system ancestor (EPLAEOSG00).
+    expect(generated.infoText).toContain('base_id = EPLAEOSG00');
+    expect(generated.infoText).not.toContain('base_id = ba3183ad');
+  });
+
+  it('a SYSTEM base uses its own setting_id as base_id', () => {
+    const adapter = getAdapter('orca');
+    const sys = JSON.parse(fixtureRaw('orca-system-elegoo-pla.json').json);
+    sys.setting_id = 'GFSL99'; // system presets carry their setting_id inline
+    const raw = fixtureRaw('orca-system-elegoo-pla.json', {
+      dir_kind: 'system', account_id: null, vendor: 'Elegoo', writable: false,
+      json: JSON.stringify(sys)
+    });
+    const parsed = adapter.parseProfile(
+      { kind: 'detected', fileName: raw.file_name, json: raw.json, infoText: null, filePath: raw.path },
+      raw
+    )!;
+    const generated = generateProfile({
+      slicerId: 'orca', baseProfile: parsed.profile, newName: 'PF System Base',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    expect(generated.infoText).toContain('base_id = GFSL99');
   });
 });
