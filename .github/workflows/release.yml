@@ -16,10 +16,12 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
+            artifact-name: perfectfit-macos
             args: '--target universal-apple-darwin --bundles dmg'
           - platform: ubuntu-22.04
             args: '--bundles deb,appimage'
           - platform: windows-latest
+            artifact-name: perfectfit-windows
             args: '--bundles nsis'
     runs-on: ${{ matrix.platform }}
     steps:
