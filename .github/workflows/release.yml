@@ -19,7 +19,6 @@ jobs:
             artifact-name: perfectfit-macos
             args: '--target universal-apple-darwin --bundles dmg'
           - platform: ubuntu-22.04
-            artifact-name: perfectfit-linux
             args: '--bundles deb,appimage'
           - platform: windows-latest
             artifact-name: perfectfit-windows
@@ -53,38 +52,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri bundles
-        run: npm run tauri -- build ${{ matrix.args }}
-
-      - name: Upload bundles
-        uses: actions/upload-artifact@v4
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ matrix.artifact-name }}
-          path: |
-            src-tauri/target/release/bundle/**/*.AppImage
-            src-tauri/target/release/bundle/**/*.deb
-            src-tauri/target/release/bundle/**/*.dmg
-            src-tauri/target/release/bundle/**/*.exe
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Download built bundles
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-
-      - name: Create draft GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: PerfectFit ${{ github.ref_name }}
-          draft: true
-          prerelease: false
-          files: release-artifacts/**/*
-          body: |
+          tagName: ${{ github.ref_name }}
+          releaseName: 'PerfectFit ${{ github.ref_name }}'
+          releaseBody: |
             # PerfectFit 1.1.0
 
             PerfectFit 1.1.0 adds Linux desktop packages alongside the existing Windows and macOS release assets, and rolls up the slicer profile installer work, Bambu Studio Developer mode calibration guidance, documentation improvements, and project-health updates completed since 1.0.0.
@@ -97,7 +71,7 @@ jobs:
 
             ## Highlights since 1.0.0
 
-            - Added experimental slicer profile generation and direct install workflows for Orca Slicer, Bambu Studio, Snapmaker Orca (“Snorca”), Elegoo Slicer’s Orca-based version, and Flash Studio Desktop.
+            - Added experimental slicer profile generation and direct install workflows for Orca Slicer, Bambu Studio, Snapmaker Orca, ElegooSlicer, and Flash Studio Desktop.
             - Added transactional backups, restore support, diff previews, profile compatibility scoring, and validation so generated profiles only patch values backed by completed calibration steps.
             - Verified Windows direct-install flows against real slicer account directories for Orca Slicer and Bambu Studio, including Bambu dual-nozzle array preservation.
             - Updated Bambu Studio coached wizard pages to recommend Developer mode as the best way to access manual calibration tests while a Bambu printer remains selected.
@@ -111,3 +85,6 @@ jobs:
             - macOS native slicer path detection remains documented but not fully real-machine verified.
             - Cloud-synchronized Orca/Bambu account directories may later sync, duplicate, re-id, or remove local preset files; PerfectFit surfaces this caveat and keeps backups for installed profiles.
             - VFA is mentioned where Bambu Developer mode exposes it, but PerfectFit does not currently have a dedicated VFA scoring step.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
