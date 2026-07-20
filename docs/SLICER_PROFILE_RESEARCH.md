@@ -122,6 +122,25 @@ Cloud caveat (Bambu Studio, OrcaSlicer with a logged-in account): the slicer may
 later sync, duplicate, re-id, or delete local files in account dirs. We warn the user
 and never claim cloud-sync behavior.
 
+### filament_id dedup (Bambu, verified 2026-07-19 in Bambu Studio 2.7.x)
+
+**A cloned preset MUST get a fresh unique `filament_id`.** When signed in, Bambu
+Studio keys the filament dropdown by `filament_id`: if a local preset shares its
+`filament_id` with a cloud-synced preset (e.g. the parent it was cloned from),
+Bambu shows the synced parent and **hides the local clone entirely** — it never
+appears in the filament list even though the file is valid, compatible, and in the
+right directory. Proven directly: a clone that kept the parent's `filament_id` was
+invisible; an otherwise-identical copy with a fresh `filament_id` appeared
+immediately. Fix (`orcaFamily.cloneAndPatch`): assign a fresh `P`+7-hex id to every
+clone whose base has a `filament_id`. Also, `base_id` in the `.info` must chain to
+the **system** ancestor's `setting_id`, not a parent *user* preset's cloud id
+(`PFUS…`), which similarly ties the clone to the parent.
+
+Corollary: this must happen at **generation** time (before first sync). Editing an
+already-synced preset's local file does not help — Bambu shows the cloud copy, which
+still carries the old id. A preset already broken this way must be deleted in the
+slicer (removing the cloud copy) and reinstalled.
+
 ---
 
 ## Per-slicer findings (all verified 2026-07-19 on Windows 11 x64 unless noted)
