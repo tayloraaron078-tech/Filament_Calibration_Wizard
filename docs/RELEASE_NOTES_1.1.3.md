@@ -44,7 +44,12 @@ profile is shown with a clear note.
   `PerfectFit - …` preset, open it for editing (the edit/pencil icon opens the
   Filament settings dialog), then click the small **'X' (delete) icon in the
   upper-right corner of that edit dialog** — this removes it from your cloud
-  sync list. Then re-run **Create Slicer Profile**. Your calibration data is
+  sync list. Then regenerate the profile **in PerfectFit** (not in Bambu
+  Studio): open PerfectFit, open your calibration project from the dashboard,
+  and click the **🧵 Create Slicer Profile** button on the project page, then
+  follow the wizard through to **Install into slicer** (or export + manual
+  import). Bambu Studio's own "Create New" dialog knows nothing about your
+  PerfectFit calibration — don't use it for this. Your calibration data is
   preserved in PerfectFit, so no re-calibration is needed.
 
 ## Unchanged

@@ -53,7 +53,7 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
     ),
     h('div', { class: 'btn-row' },
       stage ? h('a', { class: 'btn btn-primary', href: `#/wizard/${p.id}/${stage}` }, `▶ Continue: ${getCalibration(stage).shortName}`) : null,
-      hasCalibratedValues(p) ? h('a', { class: `btn ${stage ? '' : 'btn-primary'}`, href: `#/profile/${p.id}` }, '🧵 Create slicer profile') : null,
+      hasCalibratedValues(p) ? h('a', { class: `btn ${stage ? '' : 'btn-primary'}`, href: `#/profile/${p.id}` }, '🧵 Create Slicer Profile') : null,
       h('a', { class: 'btn', href: `#/report/${p.id}` }, '📄 Report'),
       h('a', { class: 'btn', href: `#/card/${p.id}` }, '🪪 Calibration card'),
       h('button', { class: 'btn', onClick: () => copyFinalsToClipboard(p) }, '📋 Copy final settings'),
@@ -85,7 +85,7 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
             `Based on “${rec.baseProfileName}” · ${rec.changedFields.length} value(s) applied · generated ${new Date(rec.generatedAt).toLocaleString()}`),
           last ? h('p', { class: 'field-help' },
             `Last action: ${last.mode}${last.success ? ' ✓' : ' ✖'} ${new Date(last.at).toLocaleString()}${last.backupId ? ` · backup ${last.backupId}` : ''}${last.verificationPassed ? ' · verified' : ''}`) : null),
-        h('a', { class: 'btn btn-sm', href: `#/profile/${p.id}` }, 'Open profile wizard')
+        h('a', { class: 'btn btn-sm', href: `#/profile/${p.id}` }, 'Re-run Create Slicer Profile')
       ));
     }
     root.append(gpCard);
@@ -185,7 +185,7 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
 }
 
 /** At least one calibrated final exists — the profile generator has something to apply. */
-function hasCalibratedValues(p: CalibrationProject): boolean {
+export function hasCalibratedValues(p: CalibrationProject): boolean {
   const f = p.finals;
   return [f.nozzleTemp, f.flowRatio, f.pressureAdvance, f.retractionDistance, f.maxVolumetricSpeed]
     .some(v => v !== undefined);

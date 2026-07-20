@@ -7,6 +7,7 @@ import { getCalibration } from '../data/calibrations';
 import { confidenceScore } from '../logic/confidence';
 import { exportProject } from '../export/backup';
 import { importFilePicker } from './importExport';
+import { hasCalibratedValues } from './projectView';
 import type { CalibrationProject, PrinterProfile } from '../types';
 import { getMaterial } from '../data/materials';
 
@@ -90,6 +91,7 @@ function projectCard(p: CalibrationProject, printers: Map<string, PrinterProfile
       stage
         ? h('a', { class: 'btn btn-primary btn-sm', href: `#/wizard/${p.id}/${stage}` }, '▶ Continue')
         : h('a', { class: 'btn btn-primary btn-sm', href: `#/project/${p.id}` }, '✔ View results'),
+      hasCalibratedValues(p) ? h('a', { class: 'btn btn-sm', href: `#/profile/${p.id}`, title: 'Create Slicer Profile' }, '🧵 Create Slicer Profile') : null,
       h('a', { class: 'btn btn-sm', href: `#/project/${p.id}` }, 'Open'),
       h('button', {
         class: 'btn btn-sm', title: 'Duplicate project', onClick: async () => {

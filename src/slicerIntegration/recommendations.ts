@@ -199,11 +199,17 @@ export interface RecommendationSet {
  */
 export function isRecommendableBaseline(
   scored: ScoredProfile,
-  printer: PrinterProfile | undefined
+  printer: PrinterProfile | undefined,
+  project: CalibrationProject
 ): boolean {
   const p = scored.profile;
   return p.sourceType === 'system'
-    && scored.compatibility.compatible          // same material family, no blocker
+    && scored.compatibility.compatible          // no blocker
+    // Affirmative material-family match required: a preset whose material is
+    // unknown (undeclared and unresolvable) merely produces a warning in
+    // evaluateCompatibility, which is not enough to RECOMMEND it — otherwise
+    // material-less presets qualify for every project and flood the list.
+    && sameMaterialFamily(p.materialType, projectMaterialLabel(project))
     && printerCompatible(p, printer);            // right printer + nozzle
 }
 
@@ -224,7 +230,7 @@ export function recommendProfiles(
     .map(p => scoreProfile(p, project, printer))
     .sort((a, b) => b.score - a.score || a.profile.name.localeCompare(b.profile.name));
 
-  const stock = all.filter(s => isRecommendableBaseline(s, printer));
+  const stock = all.filter(s => isRecommendableBaseline(s, printer, project));
   let pool = stock;
   let usedFallback = false;
   if (pool.length === 0) {

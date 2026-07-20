@@ -12,6 +12,7 @@ import * as bridge from './bridge';
 import { getAdapter } from './adapters';
 import { capabilitiesFor, SLICER_DESCRIPTORS } from './registry';
 import { loadExperimentalFeatures } from './featureFlags';
+import { nozzlesFromPrinterNames, printerModelsFromNames } from './orcaFamily';
 
 export async function currentPlatform(): Promise<Platform> {
   if (!bridge.isDesktop()) {
@@ -100,5 +101,69 @@ export async function scanProfiles(
       parseFailures.push({ fileName: f.file_name, error: String(err) });
     }
   }
+  resolveInheritedMetadata(profiles, rawFiles);
   return { profiles, parsed, parseFailures };
+}
+
+function firstStr(v: unknown): string | null {
+  if (typeof v === 'string' && v) return v;
+  if (Array.isArray(v) && typeof v[0] === 'string' && v[0]) return v[0];
+  return null;
+}
+
+function strArr(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+/**
+ * Fill in metadata that delta presets inherit rather than declare.
+ *
+ * Verified on a real Bambu Studio 2.7.x install: concrete system leaves
+ * (e.g. "Bambu ABS @BBL H2S") declare `compatible_printers` but inherit
+ * `filament_type` / `filament_vendor` from abstract parents ("@base" /
+ * fdm_filament_*); user delta presets conversely inherit
+ * `compatible_printers` from their system parent. Without resolution,
+ * system presets can't be material-matched (so they score below user
+ * presets and flood recommendations across materials) and user deltas
+ * look "compatible with every printer".
+ *
+ * Resolution walks the `inherits` chain through ALL scanned system files —
+ * including abstract, non-instantiated nodes that are filtered out of the
+ * selectable profile list. Read-only metadata fill; rawProfile is untouched.
+ */
+export function resolveInheritedMetadata(
+  profiles: DetectedFilamentProfile[],
+  rawFiles: { dir_kind: string; json: string }[]
+): void {
+  const systemByName = new Map<string, Record<string, unknown>>();
+  for (const f of rawFiles) {
+    if (f.dir_kind !== 'system') continue;
+    try {
+      const d = JSON.parse(f.json) as Record<string, unknown>;
+      if (d && typeof d.name === 'string' && d.name) systemByName.set(d.name, d);
+    } catch { /* unparsable files are already reported via parseFailures */ }
+  }
+  if (systemByName.size === 0) return;
+
+  for (const p of profiles) {
+    if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0) continue;
+    let cur = p.parentProfileName;
+    let depth = 0;
+    while (cur && depth++ < 8) {
+      const d = systemByName.get(cur);
+      if (!d) break;
+      if (!p.materialType) p.materialType = firstStr(d.filament_type);
+      if (!p.vendor) p.vendor = firstStr(d.filament_vendor);
+      if (p.compatiblePrinterNames.length === 0) {
+        const compat = strArr(d.compatible_printers);
+        if (compat.length > 0) {
+          p.compatiblePrinterNames = compat;
+          p.compatiblePrinterModels = printerModelsFromNames(compat);
+          p.compatibleNozzleDiameters = nozzlesFromPrinterNames(compat);
+        }
+      }
+      if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0) break;
+      cur = typeof d.inherits === 'string' && d.inherits ? d.inherits : null;
+    }
+  }
 }

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.4 - 2026-07-20
+
+Fixes the stock-baseline suggestions that 1.1.3 promised but did not reliably deliver, plus discoverability fixes prompted by [#10](https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard/issues/10): the 1.1.3 notes told users to "re-run Create Slicer Profile", but the feature went by three different names in the app and had no entry point on the dashboard, so it couldn't be found by that name. See [docs/RELEASE_NOTES_1.1.4.md](docs/RELEASE_NOTES_1.1.4.md).
+
+### Fixed
+
+- **Stock baselines are now found and correctly matched (verified against a real Bambu Studio 2.7.x install with an H2S).** Three related defects:
+  - The native scan of system vendor libraries was not recursive, missing presets in subdirectories (e.g. `system/BBL/filament/{P1P, Polymaker, SUNLU}/` — 150 presets on the dev machine). System scans now recurse (depth-limited).
+  - Printer-specific system leaves (e.g. `Bambu ABS @BBL H2S`) declare `compatible_printers` but inherit `filament_type`/`filament_vendor` from abstract parents, so they could not be material-matched: they scored below user presets and, worse, "qualified" for every material. The scanner now resolves inherited metadata through the system inheritance chain. The same resolution fills `compatible_printers` for user delta presets, which previously looked compatible with every printer and polluted fallback suggestions.
+  - Recommendation eligibility now requires an affirmative material-family match; presets whose material remains unknown are no longer recommendable (they stay available in Advanced mode).
+- **Wizard step 2 now shows a scan summary** (`Scanned N preset(s): X stock · Y user · …`) with an explicit warning when zero stock presets arrive from the scan, so this failure mode is visible instead of silently falling back to user presets.
+
+### Changed
+
+- **The profile feature is now called "Create Slicer Profile" everywhere.** The project-page button (previously "Create slicer profile"), the wizard page title (previously "Create and Install Filament Profile"), and the re-run button on the generated-profiles card (previously "Open profile wizard", now "Re-run Create Slicer Profile") all use the same name, matching the release notes and documentation.
+- **Create Slicer Profile is now reachable from the dashboard.** Project cards show a 🧵 Create Slicer Profile button as soon as the project has at least one calibrated value — no need to open the project first.
+- **Clarified the 1.1.3 "Notes for existing users"** in the changelog and release notes: the profile is regenerated in PerfectFit (project page → 🧵 Create Slicer Profile), not via Bambu Studio's "Create New" dialog, which does not know about PerfectFit calibration data.
+
 ## 1.1.3 - 2026-07-20
 
 Patch release fixing two profile-installer bugs found while using the 1.1.0
@@ -13,7 +31,7 @@ build with Bambu Studio. See [docs/RELEASE_NOTES_1.1.3.md](docs/RELEASE_NOTES_1.
 ### Notes for existing users
 
 - Reinstall this build for the fixes to take effect (the fix applies to newly generated profiles).
-- A profile installed by 1.1.0 into a signed-in Bambu account is stuck in Bambu's cloud with the colliding id; editing local files won't unhide it. Remove it in Bambu Studio: select the preset, open it for editing (the edit/pencil icon opens the Filament settings dialog), and click the small **'X' (delete) icon in the upper-right of that edit dialog** — this removes it from your cloud sync. Then re-run "Create Slicer Profile" — your calibration data is preserved in PerfectFit.
+- A profile installed by 1.1.0 into a signed-in Bambu account is stuck in Bambu's cloud with the colliding id; editing local files won't unhide it. Remove it in Bambu Studio: select the preset, open it for editing (the edit/pencil icon opens the Filament settings dialog), and click the small **'X' (delete) icon in the upper-right of that edit dialog** — this removes it from your cloud sync. Then regenerate the profile **in PerfectFit** (not Bambu Studio): open your calibration project from the PerfectFit dashboard and click **🧵 Create Slicer Profile** on the project page, then follow the wizard through to install/export. Your calibration data is preserved in PerfectFit, so no re-calibration is needed.
 
 ## 1.1.0 - 2026-07-19
 

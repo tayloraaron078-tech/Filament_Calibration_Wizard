@@ -94,7 +94,7 @@ export async function renderProfileWizard(root: HTMLElement, projectId: string):
 
   root.append(
     h('p', {}, h('a', { href: `#/project/${projectId}` }, '← Back to project')),
-    h('h1', { style: 'margin:.2rem 0' }, 'Create and Install Filament Profile'),
+    h('h1', { style: 'margin:.2rem 0' }, 'Create Slicer Profile'),
     h('p', { class: 'field-help' },
       h('span', { class: 'badge badge-warn' }, '🧪 Experimental Profile Installer'), ' ',
       'PerfectFit will back up the affected slicer files before installation. Profile formats can change between slicer versions, so support is verified per version. Export always works.'),
@@ -309,6 +309,18 @@ async function renderProfilesStage(
   }
 
   const rec = recommendProfiles(st.scan.profiles, project, printer);
+
+  // Scan summary — makes "no stock presets arrived from the native scan"
+  // visible instead of silently falling back (see issue with H2S baselines).
+  {
+    const bySource = new Map<string, number>();
+    for (const p of st.scan.profiles) bySource.set(p.sourceType, (bySource.get(p.sourceType) ?? 0) + 1);
+    const parts = ['system', 'user', 'cloud', 'project'].filter(k => bySource.has(k))
+      .map(k => `${bySource.get(k)} ${k === 'system' ? 'stock' : k === 'project' ? 'cached' : k}`);
+    card.append(h('p', { class: 'field-help' },
+      `Scanned ${st.scan.profiles.length} preset(s): ${parts.join(' · ') || 'none'}${st.scan.parseFailures.length ? ` · ${st.scan.parseFailures.length} unparsable` : ''}.`,
+      !bySource.has('system') ? ' ⚠ No stock (system) presets were found in this scan — suggestions below fall back to user presets.' : ''));
+  }
 
   const choose = (p: DetectedFilamentProfile) => {
     st.selectedBase = st.scan!.parsed.get(p.id) ?? null;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeMaterial, sameMaterial, sameMaterialFamily, sanitizeProfileName, defaultProfileName
 } from '../../src/slicerIntegration/orcaFamily';
-import { evaluateCompatibility, recommendProfiles, scoreProfile, printerCompatible } from '../../src/slicerIntegration/recommendations';
+import { evaluateCompatibility, recommendProfiles, scoreProfile, printerCompatible, isRecommendableBaseline } from '../../src/slicerIntegration/recommendations';
 import type { DetectedFilamentProfile } from '../../src/slicerIntegration/types';
 import type { CalibrationProject, PrinterProfile } from '../../src/types';
 
@@ -143,6 +143,31 @@ describe('deterministic recommendation', () => {
     expect(rec.best?.profile.name).toBe('Generic PETG');
     const scored = scoreProfile(profile({ name: 'Generic PETG' }), project(), printer);
     expect(scored.reasons.find(r => r.label === 'Generic stock profile')?.matched).toBe(true);
+  });
+
+  // Regression (H2S bug): system presets whose material is unknown must not be
+  // recommended — with unresolved inheritance every material-less stock preset
+  // "qualified" for every project and flooded the recommendations.
+  it('does not recommend stock presets with unknown material', () => {
+    const unknownMat = profile({ name: 'Bambu ABS @BBL H2S', materialType: null });
+    const scored = scoreProfile(unknownMat, project(), printer);
+    expect(isRecommendableBaseline(scored, printer, project())).toBe(false);
+    const rec = recommendProfiles([unknownMat], project(), printer);
+    expect(rec.best?.profile.name === 'Bambu ABS @BBL H2S' && !rec.usedFallback).toBe(false);
+  });
+
+  it('recommends stock presets whose material was resolved via inheritance', () => {
+    const resolved = profile({
+      name: 'Bambu PETG @BBL H2S', materialType: 'PETG',
+      compatiblePrinterNames: ['Bambu Lab H2S 0.4 nozzle'],
+      compatiblePrinterModels: ['Bambu Lab H2S'], compatibleNozzleDiameters: [0.4]
+    });
+    const h2s: PrinterProfile = { ...printer, name: 'H2S', manufacturer: 'Bambu Lab' };
+    const scored = scoreProfile(resolved, project(), h2s);
+    expect(isRecommendableBaseline(scored, h2s, project())).toBe(true);
+    const rec = recommendProfiles([resolved], project(), h2s);
+    expect(rec.usedFallback).toBe(false);
+    expect(rec.best?.profile.name).toBe('Bambu PETG @BBL H2S');
   });
 });
 
