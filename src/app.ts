@@ -127,6 +127,7 @@ export function startApp(): void {
   onPreferredColorSchemeChange(applyTheme);
 
   const root = document.getElementById('app')!;
+  clear(root);
   navEl = h('nav', { class: 'app-nav', 'aria-label': 'Main navigation' },
     navLink('#/', 'Projects'),
     navLink('#/printers', 'Printers'),
