@@ -57,7 +57,7 @@ flow before PA judgment) is preserved and the difference is disclosed in each mo
   Values saved in Filament settings (Flow ratio, PA, temps, MVS) or Printer settings → Extruder → Retraction.
   After calibrating, start a new project to exit calibration mode.
 - **Bambu Studio 1.7+**: `Calibration` tab → Temperature / Flow Rate (coarse/fine) / Flow Dynamics (K).
-  No built-in retraction tower or max-flow test (app provides fallbacks).
+  Developer mode exposes manual calibration tests with Bambu printers selected, including retraction, Max Flow Rate, and VFA; external models/calculators remain fallbacks.
   On Bambu printers, disable machine-side "Flow Calibration" / "Flow Dynamics Calibration"
   checkboxes when printing manual tests.
 
