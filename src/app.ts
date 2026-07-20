@@ -30,12 +30,25 @@ let outlet: HTMLElement;
 let leaveGuard: (() => Promise<boolean>) | null = null;
 export function setLeaveGuard(fn: (() => Promise<boolean>) | null): void { leaveGuard = fn; }
 
+function prefersDarkScheme(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 export function applyTheme(): void {
   const s = loadSettings();
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = s.theme === 'auto' ? (prefersDark ? 'dark' : 'light') : s.theme;
+  const theme = s.theme === 'auto' ? (prefersDarkScheme() ? 'dark' : 'light') : s.theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.largeText = String(s.largeText);
+}
+
+function onPreferredColorSchemeChange(fn: () => void): void {
+  if (typeof window.matchMedia !== 'function') return;
+  const query = window.matchMedia('(prefers-color-scheme: dark)');
+  if (typeof query.addEventListener === 'function') {
+    query.addEventListener('change', fn);
+  } else if (typeof query.addListener === 'function') {
+    query.addListener(fn);
+  }
 }
 
 export function navigate(hash: string): void {
@@ -111,9 +124,10 @@ function updateNav(r: Route): void {
 
 export function startApp(): void {
   applyTheme();
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  onPreferredColorSchemeChange(applyTheme);
 
   const root = document.getElementById('app')!;
+  clear(root);
   navEl = h('nav', { class: 'app-nav', 'aria-label': 'Main navigation' },
     navLink('#/', 'Projects'),
     navLink('#/printers', 'Printers'),
@@ -125,8 +139,7 @@ export function startApp(): void {
     class: 'btn btn-ghost btn-sm', title: 'Toggle light/dark theme', 'aria-label': 'Toggle light/dark theme',
     onClick: () => {
       const s = loadSettings();
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const current = s.theme === 'auto' ? (prefersDark ? 'dark' : 'light') : s.theme;
+      const current = s.theme === 'auto' ? (prefersDarkScheme() ? 'dark' : 'light') : s.theme;
       s.theme = current === 'dark' ? 'light' : 'dark';
       saveSettings(s);
       applyTheme();
