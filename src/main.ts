@@ -19,8 +19,7 @@ try {
     detail.textContent = String(err);
 
     main.append(title, body, detail);
-    while (root.firstChild) root.removeChild(root.firstChild);
-    root.append(main);
+    root.replaceChildren(main);
   }
   console.error('PerfectFit startup failed', err);
 }
