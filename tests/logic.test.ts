@@ -4,6 +4,7 @@ import { recommendationsForProject } from '../src/logic/recommendations';
 import { suggestPaRange, suggestRetractionRange, suggestTempRange, suggestFlowMethodDefaults } from '../src/logic/ranges';
 import { getMaterial } from '../src/data/materials';
 import { DEFAULT_ORDER, CALIBRATIONS } from '../src/data/calibrations';
+import { getSlicerContent } from '../src/data/slicers';
 import type { CalibrationProject, CalibrationId, CalibrationStepState, PrinterProfile } from '../src/types';
 
 function baseProject(): CalibrationProject {
@@ -142,4 +143,51 @@ describe('calibration definitions integrity', () => {
       }
     }
   });
+
+  it('Bambu Studio Developer mode guidance covers all affected coached steps', () => {
+    const bambu = getSlicerContent('bambu', '1.7+');
+    expect(bambu.calibrationMenuPath).toMatch(/Developer mode/i);
+
+    const developerModeSteps: CalibrationId[] = [
+      'temperature',
+      'flow-pass1',
+      'flow-pass2',
+      'pressure-advance',
+      'retraction',
+      'max-volumetric-speed'
+    ];
+
+    for (const id of developerModeSteps) {
+      const instructions = bambu.perTest[id];
+      expect(instructions, id).toBeDefined();
+      expect(instructions?.available, id).toBe(true);
+      expect(instructions?.builtIn, id).toBe(true);
+      const text = [
+        instructions?.menuPath,
+        ...(instructions?.steps ?? []),
+        ...(instructions?.gotchas ?? [])
+      ].join(' ');
+      expect(text, id).toMatch(/Developer mode/i);
+      expect(text, id).toMatch(/non–Bambu-Lab printer profile/i);
+    }
+  });
+
+  it('Bambu Studio flow guidance distinguishes coarse/fine from Orca YOLO and notes VFA exposure', () => {
+    const bambu = getSlicerContent('bambu', '1.7+');
+    const flowText = [
+      ...(bambu.perTest['flow-pass1']?.steps ?? []),
+      ...(bambu.perTest['flow-pass2']?.steps ?? [])
+    ].join(' ');
+    expect(flowText).toMatch(/coarse/i);
+    expect(flowText).toMatch(/fine/i);
+    expect(flowText).toMatch(/no YOLO/i);
+
+    const maxFlowText = [
+      ...(bambu.perTest['max-volumetric-speed']?.steps ?? []),
+      ...(bambu.perTest['max-volumetric-speed']?.gotchas ?? [])
+    ].join(' ');
+    expect(maxFlowText).toMatch(/Max Flow Rate/i);
+    expect(maxFlowText).toMatch(/VFA/i);
+  });
+
 });
