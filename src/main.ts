@@ -24,9 +24,25 @@ try {
   console.error('PerfectFit startup failed', err);
 }
 
-// PWA: register the service worker (only over http(s); harmless if it fails).
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline install is optional */ });
-  });
+// PWA service worker — for real web deployments only. Inside Tauri the app is
+// served from disk, so a service worker adds nothing and a cache-first one is
+// actively dangerous: after an update it keeps serving the previous version's
+// index.html, whose hashed bundle no longer exists, wedging the app on the
+// static loading screen. In Tauri we therefore unregister any worker left by
+// an older version and drop its caches (user data in IndexedDB/localStorage is
+// unaffected).
+const isTauri = '__TAURI_INTERNALS__' in window || location.hostname === 'tauri.localhost';
+if ('serviceWorker' in navigator) {
+  if (isTauri) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => regs.forEach((r) => { r.unregister().catch(() => {}); }))
+      .catch(() => {});
+    if (typeof caches !== 'undefined') {
+      caches.keys().then((keys) => keys.forEach((k) => { caches.delete(k).catch(() => {}); })).catch(() => {});
+    }
+  } else if (location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => { /* offline install is optional */ });
+    });
+  }
 }

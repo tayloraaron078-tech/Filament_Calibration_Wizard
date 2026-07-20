@@ -2,8 +2,30 @@ pub mod slicer_integration;
 
 use slicer_integration::{backup, discovery, filesystem, install, processes};
 
+/// Remove service-worker registrations and HTTP caches left behind by previous
+/// installs. A cache-first service worker registered by an older version keeps
+/// serving that version's index.html, whose hashed bundle no longer exists
+/// after an update, wedging the app on the static loading screen. Runs before
+/// the webview starts so no files are locked. IndexedDB and Local Storage
+/// (user calibration data) are deliberately untouched.
+#[cfg(target_os = "windows")]
+fn purge_stale_webview_caches() {
+  let Ok(local) = std::env::var("LOCALAPPDATA") else { return };
+  let profile = std::path::Path::new(&local)
+    .join("com.redeemed3d.perfectfit")
+    .join("EBWebView")
+    .join("Default");
+  for dir in ["Service Worker", "Cache", "Code Cache"] {
+    let _ = std::fs::remove_dir_all(profile.join(dir));
+  }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn purge_stale_webview_caches() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  purge_stale_webview_caches();
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .setup(|app| {

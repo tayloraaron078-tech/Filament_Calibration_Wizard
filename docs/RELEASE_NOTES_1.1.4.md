@@ -9,6 +9,23 @@ install with an H2S.
 
 ## Fixes
 
+### App no longer hangs on "Loading PerfectFit…" after an update
+
+Updating (or uninstalling and reinstalling) could leave the app stuck on the
+static loading screen. Cause: the PWA service worker was also registered
+inside the Tauri desktop webview and cached `index.html` cache-first. After
+an update it kept serving the previous version's HTML, which references a
+hashed JS bundle that no longer exists — so the app never started. WebView2
+profile data survives uninstall, which is why reinstalling didn't help.
+
+Fixed in three layers: the desktop app no longer registers a service worker
+(and unregisters any left behind by older versions); on Windows it removes
+stale service-worker and HTTP-cache directories from the WebView2 profile at
+startup, before the webview loads, which repairs installs already stuck; and
+the service worker used by real web/PWA deployments is now network-first for
+HTML so it can never pin an old shell again. Calibration data (IndexedDB /
+localStorage) is not touched by any of this.
+
 ### Stock baselines are now found and correctly matched
 
 Three related defects, all diagnosed on a live install:
