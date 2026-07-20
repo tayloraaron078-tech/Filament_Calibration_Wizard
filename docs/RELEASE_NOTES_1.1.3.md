@@ -40,9 +40,12 @@ profile is shown with a clear note.
   generated profiles.
 - A profile that 1.1.0 installed into a **signed-in Bambu account** is now stuck
   in Bambu's cloud with the colliding id; editing local files will not unhide
-  it. Delete it in Bambu Studio (filament dropdown → Custom → delete the
-  `PerfectFit - …` preset), then re-run **Create Slicer Profile**. Your
-  calibration data is preserved in PerfectFit, so no re-calibration is needed.
+  it. To remove a cloud-saved Bambu preset: in Bambu Studio, select the
+  `PerfectFit - …` preset, open it for editing (the edit/pencil icon opens the
+  Filament settings dialog), then click the small **'X' (delete) icon in the
+  upper-right corner of that edit dialog** — this removes it from your cloud
+  sync list. Then re-run **Create Slicer Profile**. Your calibration data is
+  preserved in PerfectFit, so no re-calibration is needed.
 
 ## Unchanged
 

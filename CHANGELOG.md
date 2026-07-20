@@ -13,7 +13,7 @@ build with Bambu Studio. See [docs/RELEASE_NOTES_1.1.3.md](docs/RELEASE_NOTES_1.
 ### Notes for existing users
 
 - Reinstall this build for the fixes to take effect (the fix applies to newly generated profiles).
-- A profile installed by 1.1.0 into a signed-in Bambu account is stuck in Bambu's cloud with the colliding id; editing local files won't unhide it. Delete it in Bambu Studio (filament dropdown → Custom → delete), then re-run "Create Slicer Profile" — your calibration data is preserved in PerfectFit.
+- A profile installed by 1.1.0 into a signed-in Bambu account is stuck in Bambu's cloud with the colliding id; editing local files won't unhide it. Remove it in Bambu Studio: select the preset, open it for editing (the edit/pencil icon opens the Filament settings dialog), and click the small **'X' (delete) icon in the upper-right of that edit dialog** — this removes it from your cloud sync. Then re-run "Create Slicer Profile" — your calibration data is preserved in PerfectFit.
 
 ## 1.1.0 - 2026-07-19
 
