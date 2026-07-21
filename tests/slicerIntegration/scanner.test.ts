@@ -30,7 +30,7 @@ const systemFiles = [
     dir_kind: 'system',
     json: JSON.stringify({
       type: 'filament', name: 'Bambu ABS @base', inherits: 'fdm_filament_abs',
-      instantiation: 'false', filament_vendor: ['Bambu Lab']
+      instantiation: 'false', filament_vendor: ['Bambu Lab'], version: '2.3.0.2'
     })
   },
   {
@@ -54,6 +54,14 @@ describe('resolveInheritedMetadata', () => {
     expect(leaf.vendor).toBe('Bambu Lab');
     // declared fields are never overwritten
     expect(leaf.compatiblePrinterNames).toEqual(['Bambu Lab H2S 0.4 nozzle']);
+  });
+
+  it('fills the schema version for a system leaf from the @base chain', () => {
+    const leaf = profile({
+      name: 'Bambu ABS @BBL H2S', parentProfileName: 'Bambu ABS @base'
+    });
+    resolveInheritedMetadata([leaf], systemFiles);
+    expect(leaf.profileVersion).toBe('2.3.0.2');
   });
 
   it('fills compatible_printers for a user delta from its system parent', () => {

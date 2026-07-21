@@ -485,18 +485,28 @@ function renderConfigureStage(
   }
 
   if (base.extruderCount > 1) {
+    // Bambu presets index these arrays by (tool × hotend variant), so on
+    // single-nozzle printers with interchangeable hotends (P1S, H2S, …) the
+    // two slots are Standard vs High Flow — NOT two nozzles. Only the machine
+    // preset (which we don't scan) can say which meaning applies, so label
+    // both honestly and let the user pick the slot matching their hardware.
+    const twoSlots = base.extruderCount === 2;
+    const slotLabel = (i: number) => twoSlots
+      ? (i === 0 ? 'Slot 1 — nozzle 1, or the STANDARD hotend on single-nozzle printers'
+                 : 'Slot 2 — nozzle 2, or the HIGH FLOW hotend on single-nozzle printers')
+      : `Value slot ${i + 1}`;
     const toolSel = h('select', {},
       Array.from({ length: base.extruderCount }, (_, i) =>
-        h('option', { value: String(i), selected: st.targetExtruder === i }, `Tool / nozzle ${i + 1}`))) as HTMLSelectElement;
+        h('option', { value: String(i), selected: st.targetExtruder === i }, slotLabel(i)))) as HTMLSelectElement;
     toolSel.addEventListener('change', () => { st.targetExtruder = Number(toolSel.value); });
     const allCb = h('input', { type: 'checkbox', checked: st.applyAll }) as HTMLInputElement;
     allCb.addEventListener('change', () => { st.applyAll = allCb.checked; toolSel.disabled = allCb.checked; });
-    card.append(h('h3', {}, 'Multi-tool profile'),
+    card.append(h('h3', {}, 'Per-tool / per-hotend values'),
       h('p', { class: 'field-help' },
-        `This profile carries per-tool values for ${base.extruderCount} tools/nozzles. Calibrated values will be written only to the tool you pick; other tools keep their existing values.`),
+        `This profile carries ${base.extruderCount} value slots. On dual-nozzle printers each slot is a tool; on single-nozzle Bambu printers with interchangeable hotends (e.g. P1S, H2S) the slots are hotend variants — slot 1 is Standard, slot 2 is High Flow. Calibrated values are written only to the slot you pick (choose the one matching the hardware you calibrated with); other slots keep their existing values.`),
       h('div', { class: 'field-row' },
         field('Apply calibration to', toolSel),
-        h('label', { class: 'check-item', style: 'align-self:end' }, allCb, h('span', {}, ' Apply to ALL tools (only if you calibrated with each)'))));
+        h('label', { class: 'check-item', style: 'align-self:end' }, allCb, h('span', {}, ' Apply to ALL slots (only if the calibrated values hold for every tool/hotend)'))));
   }
 
   card.append(h('div', { class: 'btn-row' },

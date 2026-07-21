@@ -146,7 +146,7 @@ export function resolveInheritedMetadata(
   if (systemByName.size === 0) return;
 
   for (const p of profiles) {
-    if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0) continue;
+    if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0 && p.profileVersion) continue;
     let cur = p.parentProfileName;
     let depth = 0;
     while (cur && depth++ < 8) {
@@ -154,6 +154,7 @@ export function resolveInheritedMetadata(
       if (!d) break;
       if (!p.materialType) p.materialType = firstStr(d.filament_type);
       if (!p.vendor) p.vendor = firstStr(d.filament_vendor);
+      if (!p.profileVersion && typeof d.version === 'string' && d.version) p.profileVersion = d.version;
       if (p.compatiblePrinterNames.length === 0) {
         const compat = strArr(d.compatible_printers);
         if (compat.length > 0) {
@@ -162,7 +163,7 @@ export function resolveInheritedMetadata(
           p.compatibleNozzleDiameters = nozzlesFromPrinterNames(compat);
         }
       }
-      if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0) break;
+      if (p.materialType && p.vendor && p.compatiblePrinterNames.length > 0 && p.profileVersion) break;
       cur = typeof d.inherits === 'string' && d.inherits ? d.inherits : null;
     }
   }

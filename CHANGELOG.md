@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.5 - 2026-07-20
+
+Fixes generated Bambu profiles still not appearing in the slicer when cloned from a stock (system) preset — the normal path since 1.1.4 started recommending stock baselines. Diagnosed against a real signed-in Bambu Studio 2.7.x install (H2S). See [docs/RELEASE_NOTES_1.1.5.md](docs/RELEASE_NOTES_1.1.5.md).
+
+### Fixed
+
+- **Profiles cloned from stock presets now carry Bambu-native identity, so Bambu Studio actually shows them.** Three gaps, all invisible in 1.1.4:
+  - The fresh `filament_id` introduced in 1.1.3 was only assigned when the base already declared one — but stock leaves inherit their id from the abstract `@base` parent, so clones of stock presets shipped with **no** `filament_id` and the signed-in slicer never adopted them. The id is now always freshly assigned (and validation blocks a missing or colliding id).
+  - Clones kept the stock leaf's own `inherits` (an abstract `@base` preset). Bambu Studio saves user presets inheriting the **concrete** system preset by name; clones of system presets now do the same, and the schema `version` is filled from the resolved inheritance chain.
+  - The `.info` sidecar always shipped an empty `user_id`; presets Bambu Studio writes into an account folder carry the account id. The installer now stamps the target account's id at install time.
+
+### Changed
+
+- **The "Multi-tool profile" step no longer claims single-nozzle printers have two nozzles.** Bambu filament presets index per-slot arrays by (tool × hotend variant): on an H2S/P1S the two slots are the **Standard vs High Flow hotends**, not two nozzles. The wizard now explains both meanings and labels the slots accordingly, so calibration lands in the slot matching your actual hotend.
+
 ## 1.1.4 - 2026-07-20
 
 Fixes the stock-baseline suggestions that 1.1.3 promised but did not reliably deliver, plus discoverability fixes prompted by [#10](https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard/issues/10): the 1.1.3 notes told users to "re-run Create Slicer Profile", but the feature went by three different names in the app and had no entry point on the dashboard, so it couldn't be found by that name. See [docs/RELEASE_NOTES_1.1.4.md](docs/RELEASE_NOTES_1.1.4.md).

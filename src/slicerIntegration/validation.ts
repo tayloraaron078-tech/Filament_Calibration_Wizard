@@ -70,8 +70,21 @@ export function validateGeneratedProfile(
     if ('version' in baseRaw && reparsed.version !== baseRaw.version) {
       errors.push(err('VERSION_DRIFT', 'Preset schema version must be copied from the base profile.'));
     }
-    if ('inherits' in baseRaw && reparsed.inherits !== baseRaw.inherits) {
-      errors.push(err('INHERITS_DRIFT', 'Inheritance must be preserved from the base profile.'));
+    // Cloning a system preset must inherit that preset by name (how the
+    // slicer saves user presets); cloning a user preset preserves its
+    // inherits (already a concrete system name).
+    const expectedInherits = ctx.baseProfile.sourceType === 'system' && ctx.baseProfile.name
+      ? ctx.baseProfile.name
+      : ('inherits' in baseRaw ? baseRaw.inherits : undefined);
+    if (expectedInherits !== undefined && reparsed.inherits !== expectedInherits) {
+      errors.push(err('INHERITS_DRIFT', `Generated profile must inherit "${String(expectedInherits)}".`));
+    }
+    // Bambu-lineage slicers key filaments by filament_id; a clone without its
+    // own fresh id is ignored or hidden behind the preset it was cloned from.
+    if (typeof reparsed.filament_id !== 'string' || !reparsed.filament_id) {
+      errors.push(err('FILAMENT_ID_MISSING', 'Generated profile must carry its own filament_id.'));
+    } else if (typeof baseRaw.filament_id === 'string' && baseRaw.filament_id === reparsed.filament_id) {
+      errors.push(err('FILAMENT_ID_COLLISION', 'filament_id must differ from the base profile (the slicer hides id collisions).'));
     }
 
     // Array shape: no per-extruder array may change length vs the base.

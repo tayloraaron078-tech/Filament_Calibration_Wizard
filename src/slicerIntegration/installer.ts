@@ -9,6 +9,7 @@ import type {
 } from './types';
 import * as bridge from './bridge';
 import { makeInstallError } from './errors';
+import { withInfoUserId } from './orcaFamily';
 import { download } from '../ui/dom';
 
 /**
@@ -69,7 +70,12 @@ export async function installProfile(args: {
       accountId: args.location.accountId,
       profileName: args.profile.name,
       presetJson: args.profile.serialized,
-      infoText: args.profile.infoText,
+      // Account folders require the owning account in the sidecar, or the
+      // signed-in slicer ignores the preset. "default" (local) stays empty.
+      infoText: withInfoUserId(
+        args.profile.infoText,
+        args.location.accountId === 'default' ? '' : args.location.accountId
+      ),
       projectId: args.projectId,
       allowReplace: args.allowReplace,
       skipProcessCheck: false

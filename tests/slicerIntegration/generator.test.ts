@@ -117,11 +117,13 @@ describe('clone-and-patch round trips (all slicer fixtures)', () => {
         expect(reparsed[key], `field ${key} must be preserved`).toEqual(original[key]);
       }
 
-      // 5b. if the base had a filament_id, the clone gets a fresh unique one
-      //     (so Bambu doesn't hide it behind the cloud-synced parent).
+      // 5b. the clone ALWAYS gets a fresh filament_id — Bambu keys filaments
+      //     by it, hiding id collisions and ignoring presets without one
+      //     (system leaves inherit theirs, so the clone would otherwise have
+      //     none at all).
+      expect(String(reparsed.filament_id)).toMatch(/^P[0-9a-f]{7}$/);
       if (typeof original.filament_id === 'string' && original.filament_id) {
         expect(reparsed.filament_id).not.toEqual(original.filament_id);
-        expect(String(reparsed.filament_id)).toMatch(/^P[0-9a-f]{7}$/);
       }
 
       // 6. the base was not mutated
@@ -244,5 +246,72 @@ describe('clone-and-patch round trips (all slicer fixtures)', () => {
       applyToAllExtruders: false, project: makeProject()
     }, parsed);
     expect(generated.infoText).toContain('base_id = GFSL99');
+  });
+});
+
+// Regression: cloning a stock Bambu leaf must produce a preset shaped like one
+// Bambu Studio itself saves — fresh filament_id (leaves inherit theirs, so the
+// clone had NONE and the signed-in slicer never showed it), inherits pointing
+// at the concrete leaf by name (not its abstract "@base" parent), and a schema
+// version filled from the resolved chain.
+describe('system-leaf clones carry Bambu-native identity (H2S visibility bug)', () => {
+  function parseSystemLeaf() {
+    const adapter = getAdapter('bambu');
+    const leaf = {
+      type: 'filament', name: 'Generic ASA @BBL H2S 0.4 nozzle', from: 'system',
+      instantiation: 'true', inherits: 'Generic ASA @base', setting_id: 'GFSA00_H2S',
+      compatible_printers: ['Bambu Lab H2S 0.4 nozzle'],
+      nozzle_temperature: ['260', '260'],
+      filament_max_volumetric_speed: ['12', '12']
+      // deliberately NO filament_id and NO version — both live in @base
+    };
+    const raw = fixtureRaw('orca-system-elegoo-pla.json', {
+      dir_kind: 'system', account_id: null, vendor: 'BBL', writable: false,
+      file_name: 'Generic ASA @BBL H2S 0.4 nozzle.json',
+      json: JSON.stringify(leaf)
+    });
+    const parsed = getAdapter('bambu').parseProfile(
+      { kind: 'detected', fileName: raw.file_name, json: raw.json, infoText: null, filePath: raw.path },
+      raw
+    )!;
+    // scanner inheritance resolution supplies the version from the @base chain
+    parsed.profile.profileVersion = '2.3.0.2';
+    void adapter;
+    return parsed;
+  }
+
+  it('assigns a fresh filament_id even though the leaf declares none', () => {
+    const parsed = parseSystemLeaf();
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF H2S ASA',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    expect(String(reparsed.filament_id)).toMatch(/^P[0-9a-f]{7}$/);
+  });
+
+  it('inherits the concrete leaf by name and fills the resolved version', () => {
+    const parsed = parseSystemLeaf();
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF H2S ASA',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    expect(reparsed.inherits).toBe('Generic ASA @BBL H2S 0.4 nozzle');
+    expect(reparsed.version).toBe('2.3.0.2');
+  });
+
+  it('keeps inherits untouched when cloning a user preset', () => {
+    const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
+    const original = parsed.profile.rawProfile as Record<string, unknown>;
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF User Clone',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    expect(reparsed.inherits).toEqual(original.inherits);
   });
 });

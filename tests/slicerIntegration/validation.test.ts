@@ -108,6 +108,39 @@ describe('validation', () => {
     expect(result.errors.some(e => e.code === 'VERSION_DRIFT')).toBe(true);
   });
 
+  it('blocks a clone without its own filament_id (Bambu hides those)', () => {
+    const project = makeProject();
+    const { generated, parsed } = generate(project);
+    delete (generated.data as Record<string, unknown>).filament_id;
+    generated.serialized = JSON.stringify(generated.data, null, 4);
+    const result = validateGeneratedProfile(generated, { project, printer, baseProfile: parsed.profile });
+    expect(result.errors.some(e => e.code === 'FILAMENT_ID_MISSING')).toBe(true);
+  });
+
+  it('blocks a clone whose filament_id collides with the base', () => {
+    const project = makeProject();
+    const { generated, parsed } = generate(project);
+    const baseRaw = parsed.profile.rawProfile as Record<string, unknown>;
+    if (typeof baseRaw.filament_id === 'string' && baseRaw.filament_id) {
+      (generated.data as Record<string, unknown>).filament_id = baseRaw.filament_id;
+      generated.serialized = JSON.stringify(generated.data, null, 4);
+      const result = validateGeneratedProfile(generated, { project, printer, baseProfile: parsed.profile });
+      expect(result.errors.some(e => e.code === 'FILAMENT_ID_COLLISION')).toBe(true);
+    }
+  });
+
+  it('requires a system-base clone to inherit the leaf by name', () => {
+    const project = makeProject();
+    const { generated, parsed } = generate(project);
+    parsed.profile.sourceType = 'system';
+    // generator would have set inherits to the leaf name; simulate the old
+    // (buggy) behavior of keeping the abstract parent
+    (generated.data as Record<string, unknown>).inherits = 'Generic PLA @base';
+    generated.serialized = JSON.stringify(generated.data, null, 4);
+    const result = validateGeneratedProfile(generated, { project, printer, baseProfile: parsed.profile });
+    expect(result.errors.some(e => e.code === 'INHERITS_DRIFT')).toBe(true);
+  });
+
   it('warns about duplicate names at the destination', () => {
     const project = makeProject();
     const { generated, parsed } = generate(project);
@@ -144,7 +177,7 @@ describe('diff', () => {
     expect(formatChange({ presetKey: 'filament_retraction_length', label: 'Retraction length', before: 'nil', after: '0.9', unit: 'mm' }))
       .toBe('Retraction length: (printer default) → 0.9 mm');
     expect(formatChange({ presetKey: 'nozzle_temperature', label: 'Nozzle temperature', before: '220', after: '215', unit: '°C', extruderIndex: 1 }))
-      .toBe('Nozzle temperature (tool 2): 220 °C → 215 °C');
+      .toBe('Nozzle temperature (slot 2): 220 °C → 215 °C');
   });
 
   it('fullJsonDiff reports added/removed/changed only', () => {
