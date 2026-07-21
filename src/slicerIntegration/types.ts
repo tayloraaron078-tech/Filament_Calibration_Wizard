@@ -146,6 +146,8 @@ export interface CalibratedFieldPatch {
   label: string;
   value: number;
   unit: string;
+  /** Literal suffix appended to the serialized value (e.g. '%' for filament_shrink). */
+  valueSuffix?: string;
   /** Extra keys that must be set alongside (e.g. enable_pressure_advance). */
   companions?: { presetKey: string; value: string }[];
 }

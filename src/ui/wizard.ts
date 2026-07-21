@@ -202,6 +202,7 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
         const relevantModels = MODEL_MANIFEST.filter(mm =>
           (stepId === 'final-verification' && mm.test === 'Final verification') ||
           (stepId === 'retraction' && mm.test.startsWith('Retraction')) ||
+          (stepId === 'shrinkage' && mm.test.startsWith('Shrinkage')) ||
           (stepId === 'max-volumetric-speed' && mm.test.startsWith('Max flow')));
         if (relevantModels.length) {
           card.append(h('details', { class: 'why' },
@@ -236,6 +237,12 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
       // ---------------------------------------------------------------- slicer
       case 'slicer': {
         card.append(h('h2', { style: 'margin-top:0' }, `Slicer instructions — ${slicer.slicerLabel} ${slicer.version}`));
+        if (project.filament.startingProfile) {
+          card.append(h('p', {},
+            h('strong', {}, 'Profile you\'re calibrating: '),
+            h('span', { class: 'value-chip' }, project.filament.startingProfile),
+            h('span', { class: 'field-help', style: 'margin-left:.4rem' }, 'Make sure THIS filament preset is the one selected in the slicer before running the test.')));
+        }
         if (!instructions || !instructions.available) {
           card.append(frag(
             h('div', { class: 'callout callout-warn' },
@@ -331,6 +338,10 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
           const dest = instructions?.saveTo;
           card.append(frag(
             h('h3', {}, '💾 Save it in the slicer'),
+            project.filament.startingProfile && dest?.scope === 'filament' ? h('p', {},
+              h('strong', {}, 'Profile to modify: '),
+              h('span', { class: 'value-chip' }, project.filament.startingProfile),
+              h('span', { class: 'field-help', style: 'margin-left:.4rem' }, '— the filament preset this project is calibrating. Enter the value there (saving it as a user preset), not in whichever preset happens to be selected.')) : null,
             dest ? h('p', {}, h('strong', {}, 'Where: '), `${dest.path} → `, h('strong', {}, dest.field)) : null,
             dest ? h('p', {}, h('span', { class: `badge ${dest.scope === 'filament' ? 'badge-accent' : dest.scope === 'printer' ? 'badge-warn' : 'badge-info'}` },
               dest.scope === 'filament' ? '🧵 Filament profile setting' :

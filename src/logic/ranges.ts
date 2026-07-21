@@ -83,7 +83,9 @@ export const STEP_DEPENDENCY_WARNINGS: Partial<Record<CalibrationId, string>> = 
   'flow-pass1': 'Flow results are only trustworthy after temperature is calibrated.',
   'flow-pass2': 'Pass 2 requires the Pass 1 (or YOLO) result saved in the profile.',
   'pressure-advance': 'Pressure Advance is judged by line width — calibrate flow first.',
+  'flow-verify': 'The re-check only makes sense AFTER Pressure Advance is calibrated and saved — that\'s what it verifies against.',
   retraction: 'Stringing depends on temperature and pressure — calibrate those first.',
   'max-volumetric-speed': 'Max flow depends strongly on temperature — calibrate it first.',
+  shrinkage: 'Dimensions are only meaningful after temperature and flow are locked in — over-extrusion fakes low shrinkage.',
   'final-verification': 'Verification is only meaningful after the other calibrations.'
 };

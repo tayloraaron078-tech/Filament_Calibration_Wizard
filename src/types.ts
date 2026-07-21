@@ -17,8 +17,10 @@ export type CalibrationId =
   | 'flow-pass1'
   | 'flow-pass2'
   | 'pressure-advance'
+  | 'flow-verify'
   | 'retraction'
   | 'max-volumetric-speed'
+  | 'shrinkage'
   | 'final-verification';
 
 export type StepStatus = 'not-started' | 'in-progress' | 'completed' | 'skipped';
@@ -108,6 +110,20 @@ export interface CalibrationProject {
    * Absent on v1 projects; normalized to [] on load/import.
    */
   generatedProfiles?: import('./slicerIntegration/types').GeneratedProfileRecord[];
+  /**
+   * Outcome of the pre-calibration slicer preset backup prompt (optional;
+   * absent on older projects). Present once the user backed up or dismissed.
+   */
+  presetBackup?: PresetBackupRecord;
+}
+
+/** Result of the "back up your slicer presets before calibrating" prompt. */
+export interface PresetBackupRecord {
+  status: 'done' | 'skipped';
+  at: string;
+  /** Ids in the desktop backup store (Settings → Slicer profile backups). */
+  backupIds: string[];
+  fileCount: number;
 }
 
 export interface FinalValues {
@@ -120,6 +136,8 @@ export interface FinalValues {
   retractionDistance?: number;
   retractionSpeed?: number;
   maxVolumetricSpeed?: number;
+  /** Measured XY shrinkage as a percentage of nominal size (e.g. 99.4). */
+  shrinkagePercent?: number;
 }
 
 export interface CalibrationStepState {
