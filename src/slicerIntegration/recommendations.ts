@@ -182,6 +182,42 @@ export function scoreProfile(
   return { profile, score, reasons, compatibility };
 }
 
+/**
+ * Rank profile NAMES for the "Starting filament profile" picker on the New
+ * Project page: brand-or-Generic presets matching the chosen material and
+ * printer first, everything else (different materials, other printers) after,
+ * for advanced users. Deduplicates by name, keeping each name's best score.
+ */
+export function rankBaselineNames(
+  profiles: DetectedFilamentProfile[],
+  project: CalibrationProject,
+  printer: PrinterProfile | undefined,
+  cap = 500
+): string[] {
+  const projMat = projectMaterialLabel(project);
+  // Tier 0: right material family AND compatible with the selected printer
+  // (brand and Generic presets sort within the tier by score, so brand wins
+  // when present and Generic leads otherwise). Tier 1: right material, other
+  // printer. Tier 2: everything else, for advanced users.
+  const tierOf = (p: DetectedFilamentProfile): number => {
+    const mat = sameMaterialFamily(p.materialType, projMat);
+    if (!mat) return 2;
+    return printerCompatible(p, printer) ? 0 : 1;
+  };
+  const best = new Map<string, { tier: number; score: number }>();
+  for (const p of profiles) {
+    const entry = { tier: tierOf(p), score: scoreProfile(p, project, printer).score };
+    const prev = best.get(p.name);
+    if (!prev || entry.tier < prev.tier || (entry.tier === prev.tier && entry.score > prev.score)) {
+      best.set(p.name, entry);
+    }
+  }
+  return [...best.entries()]
+    .sort((a, b) => a[1].tier - b[1].tier || b[1].score - a[1].score || a[0].localeCompare(b[0]))
+    .slice(0, cap)
+    .map(([name]) => name);
+}
+
 export interface RecommendationSet {
   best: ScoredProfile | null;
   alternatives: ScoredProfile[];
