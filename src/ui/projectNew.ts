@@ -4,8 +4,10 @@ import { MATERIALS, getMaterial } from '../data/materials';
 import { slicerVersionOptions } from '../data/slicers';
 import { navigate } from '../app';
 import * as bridge from '../slicerIntegration/bridge';
-import type { IntegrationSlicerId } from '../slicerIntegration/types';
-import type { MaterialId, SlicerId, ExperienceMode } from '../types';
+import { detectInstallations, scanProfiles } from '../slicerIntegration/scanner';
+import { rankBaselineNames } from '../slicerIntegration/recommendations';
+import type { DetectedFilamentProfile, IntegrationSlicerId } from '../slicerIntegration/types';
+import type { CalibrationProject, MaterialId, SlicerId, ExperienceMode } from '../types';
 
 export async function renderNewProject(root: HTMLElement): Promise<void> {
   const printers = await listPrinters();
@@ -41,31 +43,55 @@ export async function renderNewProject(root: HTMLElement): Promise<void> {
   const slicerSel = h('select', {}, slicerVersionOptions().map(o =>
     h('option', { value: `${o.slicer}|${o.version}` }, o.label)));
 
-  // Desktop: suggest the profiles actually present in the selected slicer, so
-  // the wizard can later tell the user exactly which preset to modify.
+  // Desktop: suggest the profiles actually present in the selected slicer,
+  // RANKED for this project — brand (or Generic) presets matching the chosen
+  // material and printer first, everything else after for advanced users.
+  // The scan is cached per slicer; re-ranking on form changes is instant.
+  let scannedFor: IntegrationSlicerId | null = null;
+  let scannedProfiles: DetectedFilamentProfile[] = [];
+  const rankProfileOptions = () => {
+    clear(profileOptions);
+    if (!scannedProfiles.length) return;
+    // Score against what the form currently says, via a throwaway project.
+    const pseudo: CalibrationProject = createProject({
+      filament: {
+        manufacturer: manufacturer.value.trim(),
+        productLine: '',
+        material: materialSel.value as MaterialId,
+        materialOther: materialSel.value === 'OTHER' ? materialOther.value.trim() : undefined,
+        color: '', diameter: 1.75, startingProfile: ''
+      },
+      printerProfileId: printerSel.value, nozzleType: '',
+      slicer: { slicer: slicerSel.value.split('|')[0] as SlicerId, version: '' },
+      notes: '', mode: 'coach'
+    });
+    const printer = printers.find(p => p.id === printerSel.value);
+    rankBaselineNames(scannedProfiles, pseudo, printer)
+      .forEach(n => profileOptions.append(h('option', { value: n })));
+  };
   const refreshProfileOptions = async () => {
     if (!bridge.isDesktop()) return;
-    clear(profileOptions);
     try {
-      const [wizSlicer] = slicerSel.value.split('|');
-      const detected = await bridge.detectSupportedSlicers();
-      const inst = detected.find(d => d.slicer_id === wizSlicer);
-      const loc = inst?.user_locations[0];
-      if (!inst || !loc) return;
-      const files = await bridge.scanSlicerProfiles(inst.slicer_id as IntegrationSlicerId, loc.account_id);
-      const names = new Set<string>();
-      for (const f of files) {
-        if ((f.dir_kind as string) !== 'user' && (f.dir_kind as string) !== 'system') continue;
-        try {
-          const nm = (JSON.parse(f.json) as { name?: string }).name;
-          if (nm) names.add(nm);
-        } catch { /* skip unparseable presets */ }
+      const wizSlicer = slicerSel.value.split('|')[0] as IntegrationSlicerId;
+      if (scannedFor !== wizSlicer) {
+        const installs = await detectInstallations();
+        const inst = installs.find(i => i.slicerId === wizSlicer);
+        const loc = inst?.userDataLocations.find(l => l.active) ?? inst?.userDataLocations[0];
+        if (!inst || !loc) { scannedFor = wizSlicer; scannedProfiles = []; return; }
+        const scan = await scanProfiles(inst.slicerId, loc);
+        scannedProfiles = scan.profiles;
+        scannedFor = wizSlicer;
       }
-      [...names].sort((a, b) => a.localeCompare(b)).slice(0, 500)
-        .forEach(n => profileOptions.append(h('option', { value: n })));
+      rankProfileOptions();
     } catch { /* scan is best-effort; free text always works */ }
   };
   slicerSel.addEventListener('change', () => void refreshProfileOptions());
+  [materialSel, printerSel].forEach(el => el.addEventListener('change', rankProfileOptions));
+  let rankTimer: ReturnType<typeof setTimeout> | undefined;
+  [manufacturer, materialOther].forEach(el => el.addEventListener('input', () => {
+    clearTimeout(rankTimer);
+    rankTimer = setTimeout(rankProfileOptions, 250);
+  }));
   void refreshProfileOptions();
   const notes = h('textarea', { placeholder: 'Anything worth remembering about this spool (age, storage, prior drying…)' });
   const dateInput = h('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });

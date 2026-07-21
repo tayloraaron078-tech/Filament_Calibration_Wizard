@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeMaterial, sameMaterial, sameMaterialFamily, sanitizeProfileName, defaultProfileName
 } from '../../src/slicerIntegration/orcaFamily';
-import { evaluateCompatibility, recommendProfiles, scoreProfile, printerCompatible, isRecommendableBaseline } from '../../src/slicerIntegration/recommendations';
+import { evaluateCompatibility, recommendProfiles, scoreProfile, printerCompatible, isRecommendableBaseline, rankBaselineNames } from '../../src/slicerIntegration/recommendations';
 import type { DetectedFilamentProfile } from '../../src/slicerIntegration/types';
 import type { CalibrationProject, PrinterProfile } from '../../src/types';
 
@@ -73,6 +73,48 @@ describe('compatibility', () => {
     );
     expect(r.compatible).toBe(true);
     expect(r.warnings.some(w => /0\.6/.test(w))).toBe(true);
+  });
+});
+
+describe('rankBaselineNames (New Project starting-profile picker)', () => {
+  const h2s: PrinterProfile = { ...printer, name: 'Bambu Lab H2S', manufacturer: 'Bambu Lab' };
+  const bambuPlaProject = (): CalibrationProject => {
+    const p = project();
+    p.filament = { ...p.filament, manufacturer: 'Bambu Lab', material: 'PLA' };
+    return p;
+  };
+  const library = [
+    profile({ name: 'Generic PETG @BBL H2S', materialType: 'PETG', compatiblePrinterNames: ['Bambu Lab H2S 0.4 nozzle'], compatiblePrinterModels: ['Bambu Lab H2S'], compatibleNozzleDiameters: [0.4] }),
+    profile({ name: 'Bambu PLA Basic @BBL X1C', materialType: 'PLA', vendor: 'Bambu Lab', compatiblePrinterNames: ['Bambu Lab X1 Carbon 0.4 nozzle'], compatiblePrinterModels: ['Bambu Lab X1 Carbon'], compatibleNozzleDiameters: [0.4] }),
+    profile({ name: 'Generic PLA @BBL H2S', materialType: 'PLA', compatiblePrinterNames: ['Bambu Lab H2S 0.4 nozzle'], compatiblePrinterModels: ['Bambu Lab H2S'], compatibleNozzleDiameters: [0.4] }),
+    profile({ name: 'Bambu PLA Basic @BBL H2S', materialType: 'PLA', vendor: 'Bambu Lab', compatiblePrinterNames: ['Bambu Lab H2S 0.4 nozzle'], compatiblePrinterModels: ['Bambu Lab H2S'], compatibleNozzleDiameters: [0.4] }),
+    profile({ name: 'Overture TPU (user)', materialType: 'TPU', sourceType: 'user' }),
+    profile({ name: 'Bambu ABS @BBL H2S', materialType: 'ABS', vendor: 'Bambu Lab', compatiblePrinterNames: ['Bambu Lab H2S 0.4 nozzle'], compatiblePrinterModels: ['Bambu Lab H2S'], compatibleNozzleDiameters: [0.4] })
+  ];
+
+  it('brand + material + printer match tops the list; Generic next; wrong materials sink', () => {
+    const names = rankBaselineNames(library, bambuPlaProject(), h2s);
+    expect(names[0]).toBe('Bambu PLA Basic @BBL H2S');
+    expect(names[1]).toBe('Generic PLA @BBL H2S');
+    // Right material, wrong printer still beats wrong materials.
+    expect(names.indexOf('Bambu PLA Basic @BBL X1C')).toBeLessThan(names.indexOf('Bambu ABS @BBL H2S'));
+    // Everything remains listed for advanced users — nothing is dropped.
+    expect(names).toHaveLength(library.length);
+    expect(names.indexOf('Overture TPU (user)')).toBeGreaterThan(2);
+  });
+
+  it('Generic tops the list when no brand-name preset exists for the material', () => {
+    const p = bambuPlaProject();
+    p.filament.manufacturer = 'Polymaker';
+    const names = rankBaselineNames(library, p, h2s);
+    expect(names[0]).toBe('Generic PLA @BBL H2S');
+  });
+
+  it('deduplicates repeated names keeping the best score', () => {
+    const dupes = [...library, profile({ name: 'Generic PLA @BBL H2S', materialType: 'PLA', sourceType: 'user' })];
+    const names = rankBaselineNames(dupes, bambuPlaProject(), h2s);
+    expect(names.filter(n => n === 'Generic PLA @BBL H2S')).toHaveLength(1);
+    expect(names[1]).toBe('Generic PLA @BBL H2S');
   });
 });
 

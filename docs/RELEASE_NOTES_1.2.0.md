@@ -74,8 +74,11 @@ out factory-wet spools with typical drying temperatures.
   corrected.
 - **Every test names the profile to modify:** the New Project form suggests
   presets detected in your slicer (desktop app) for the "Starting filament
-  profile" field, and the slicer-instructions and save panels display that
-  profile so values land in the right preset.
+  profile" field — **ranked** so the brand-matching preset (or Generic, when
+  your brand isn't stocked) for your material and printer sits at the top, with
+  everything else below for advanced users, re-ranking live as you change
+  brand, material, or printer. The slicer-instructions and save panels display
+  that profile so values land in the right preset.
 - Settings' two backup cards are clearly distinguished ("App data backup
   (projects & printers)" vs "Slicer profile backups").
 - The final verification checklist gained a "Dimensional accuracy" category.
