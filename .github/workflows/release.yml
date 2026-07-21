@@ -59,32 +59,26 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'PerfectFit ${{ github.ref_name }}'
           releaseBody: |
-            # PerfectFit 1.1.0
+            # PerfectFit 1.2.0
 
-            PerfectFit 1.1.0 adds Linux desktop packages alongside the existing Windows and macOS release assets, and rolls up the slicer profile installer work, Bambu Studio Developer mode calibration guidance, documentation improvements, and project-health updates completed since 1.0.0.
+            A community-driven release — everything in it started as feedback from **confuzled** on the community Discord. Full notes: docs/RELEASE_NOTES_1.2.0.md in the repository.
+
+            ## Highlights
+
+            - **Back up your slicer profiles BEFORE calibrating:** a first-run prompt, a per-project prompt before any profile edits are suggested, and an on-demand button in Settings — all checksummed and restorable file-by-file from Settings → Slicer profile backups.
+            - **New step — Flow Ratio Re-check (after Pressure Advance):** PA changes what you judged in the flow test; the re-check confirms or corrects the saved ratio with one fine plate.
+            - **New step — Shrinkage / Dimensional Accuracy:** ap.engineering's free Printables calibration plate (spreadsheet scale-error entry or direct measurements), Vector3D's paid CaliFlower MK2, or any large measured object. Results flow into reports, cards, and generated profiles (`filament_shrink`).
+            - **Honest drying advice:** "fresh from a sealed bag" no longer counts as dry — PETG/TPU/PCTG often arrive wet from the factory; the checklist and material warnings now say so, with drying temperatures.
+            - **Bambu Studio Develop Mode described accurately:** the Preferences checkbox really is labeled "Develop Mode", and the calibration tests live under the title-bar Calibration button next to the Redo arrow (like all Orca-based slicers). All Bambu menu paths corrected.
+            - **Each test names the profile to modify**, with detected-preset suggestions when creating a project (desktop app).
+
+            Existing projects gain the two new steps as "not started" — progress and scores are preserved; both steps are skippable.
 
             ## Downloads
 
             - Windows: NSIS installer (`.exe`).
             - macOS: universal Apple Silicon + Intel disk image (`.dmg`).
-            - Linux: Debian package (`.deb`) plus portable AppImage (`.AppImage`) for broad distro coverage.
-
-            ## Highlights since 1.0.0
-
-            - Added experimental slicer profile generation and direct install workflows for Orca Slicer, Bambu Studio, Snapmaker Orca, ElegooSlicer, and Flash Studio Desktop.
-            - Added transactional backups, restore support, diff previews, profile compatibility scoring, and validation so generated profiles only patch values backed by completed calibration steps.
-            - Verified Windows direct-install flows against real slicer account directories for Orca Slicer and Bambu Studio, including Bambu dual-nozzle array preservation.
-            - Updated Bambu Studio coached wizard pages to recommend Developer mode as the best way to access manual calibration tests while a Bambu printer remains selected.
-            - Documented Bambu Developer mode availability for Temperature, Flow Rate coarse/fine (no YOLO), Pressure Advance / Flow Dynamics, Retraction, Max Flow Rate, and VFA.
-            - Added Linux release packaging via `.deb` and AppImage artifacts.
-            - Added issue templates, contribution guidance, security policy, code of conduct, pull request template, and expanded automated coverage.
-
-            ## Known limitations
-
-            - Linux native slicer profile detection/install behavior is not yet claimed as verified; Linux packages are provided so users can run the desktop app and use browser-equivalent/export workflows while native Linux slicer integration is validated.
-            - macOS native slicer path detection remains documented but not fully real-machine verified.
-            - Cloud-synchronized Orca/Bambu account directories may later sync, duplicate, re-id, or remove local preset files; PerfectFit surfaces this caveat and keeps backups for installed profiles.
-            - VFA is mentioned where Bambu Developer mode exposes it, but PerfectFit does not currently have a dedicated VFA scoring step.
+            - Linux: Debian package (`.deb`) plus portable AppImage (`.AppImage`).
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

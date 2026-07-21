@@ -249,6 +249,31 @@ export function shrinkageFromMeasurement(nominalMm: number, measuredMm: number):
   };
 }
 
+/**
+ * Convert a scale error (the ap.engineering shrinkage-plate spreadsheet's
+ * "Avg/Calculated scale error", e.g. −0.54%) into the slicer's shrinkage
+ * percentage: shrinkage% = 100 + scaleError%.
+ */
+export function shrinkageFromScaleError(scaleErrorPercent: number): CalcResult {
+  const raw = 100 + scaleErrorPercent;
+  const warnings: string[] = [];
+  if (scaleErrorPercent > 0.5) {
+    warnings.push('A positive scale error means the part printed LARGER than nominal — usually over-extrusion or measuring across the elephant-foot base, not filament behavior. Double-check flow and the measurements.');
+  }
+  if (scaleErrorPercent < -3) {
+    warnings.push('More than 3% shrinkage is extreme for common filaments — re-check the spreadsheet inputs before trusting this.');
+  }
+  if (Math.abs(scaleErrorPercent) > 50) {
+    warnings.push('That looks like a shrinkage percentage (e.g. 99.5), not a scale ERROR (e.g. −0.5). Enter the error value from the spreadsheet — a small number near zero, usually negative.');
+  }
+  return {
+    inputs: { scaleErrorPercent },
+    formulaText: 'Shrinkage% = 100 + scale error%',
+    substituted: `100 + (${scaleErrorPercent}) = ${raw.toFixed(3)}%`,
+    raw, rounded: roundTo(raw, 2), precision: 2, unit: '%', warnings
+  };
+}
+
 /** Combine X and Y shrinkage into the single value the slicer field takes. */
 export function shrinkageCombined(xPercent: number, yPercent: number): CalcResult {
   const raw = (xPercent + yPercent) / 2;

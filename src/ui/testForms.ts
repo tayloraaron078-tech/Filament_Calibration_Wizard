@@ -5,7 +5,7 @@ import type {
 import {
   flowYolo, flowPercent, paTower, paFromSample, retractionFromHeight,
   mvsFromHeight, mvsProduction, volumetricFlow, maxSpeedForFlow, generateRange, roundTo,
-  shrinkageFromMeasurement, shrinkageCombined,
+  shrinkageFromMeasurement, shrinkageCombined, shrinkageFromScaleError,
   type CalcResult
 } from '../logic/formulas';
 import {
@@ -738,15 +738,33 @@ const mvsController: TestController = {
 // Shrinkage / dimensional accuracy
 // ---------------------------------------------------------------------------
 
+const SHRINK_PLATE_URL = 'https://www.printables.com/model/480907-shrinkage-calculator-dimensional-calibration-tool';
+const CALIFLOWER_URL = 'https://vector3d.shop/products/califlower-calibration-tool-mk2';
+
 const shrinkageController: TestController = {
   settingsForm(ctx, prior) {
-    const directReading = ctx.method !== 'measured-object';
-    if (directReading) {
+    const toolLink = (url: string, label: string) =>
+      h('a', { href: url, target: '_blank', rel: 'noopener' }, label);
+
+    if (ctx.method === 'vernier-tool') {
       const el = h('div', {},
-        h('p', {}, ctx.method === 'calilantern'
-          ? 'Print the CaliLantern with your calibrated filament profile and your normal process profile, at 100% scale with any slicer shrinkage compensation set to 100% (off) — the tool measures what the compensation should BE, so it must not already be applied.'
-          : 'Print the shrinkage tool with your calibrated filament profile at 100% scale, with the slicer\'s shrinkage compensation at 100% (off) — the tool measures what the compensation should BE, so it must not already be applied.'),
-        h('p', { class: 'field-help' }, 'Let the parts cool fully before reading the scale. You\'ll enter the percentage(s) the tool shows in the result step — no calipers or math needed.')
+        h('p', {},
+          'Download the free calibration plate by ap.engineering: ',
+          toolLink(SHRINK_PLATE_URL, 'Shrinkage Calculator / Dimensional Calibration Tool (Printables)'), '.'),
+        h('p', {}, 'Print it at 100% scale with your calibrated filament profile, shrinkage compensation set to 100% (off) — the test measures what the compensation SHOULD be, so it must not already be applied.'),
+        h('p', { class: 'field-help' },
+          'After full cooldown, measure the plate\'s features with calipers (squares, diamonds — nominal sizes 150/140/90/80/35/25 mm). ' +
+          'The author\'s companion Google Sheet averages the scale error of every feature and separates out horizontal-size (radial) error; in the result step you can enter either the sheet\'s scale-error result, or two caliper measurements directly and let this wizard do the math.')
+      );
+      return { el, collect: () => ({ data: { entry: 'plate' }, issues: [] }) };
+    }
+    if (ctx.method === 'calilantern') {
+      const el = h('div', {},
+        h('p', {},
+          'The CaliFlower MK2 is a paid tool by Vector3D: ',
+          toolLink(CALIFLOWER_URL, 'vector3d.shop — CaliFlower Calibration Tool MK2'), '.'),
+        h('p', {}, 'Print it at 100% scale with your calibrated filament profile, shrinkage compensation set to 100% (off). Measure with calipers per its instructions and run Vector3D\'s calculator — you\'ll enter the resulting shrinkage percentage(s) in the result step.'),
+        h('p', { class: 'field-help' }, 'Let the part cool fully before measuring. The calculator also flags printer skew — worth fixing mechanically before compensating in the filament profile.')
       );
       return { el, collect: () => ({ data: { entry: 'direct' }, issues: [] }) };
     }
@@ -775,23 +793,83 @@ const shrinkageController: TestController = {
   },
 
   resultForm(ctx, settings, prior) {
-    const direct = settings.entry !== 'measured';
+    const entry = String(settings.entry ?? 'direct');
+    const el = h('div', {});
+
+    // --- plate: spreadsheet scale error OR two direct measurements ----------
+    if (entry === 'plate') {
+      let mode: 'sheet' | 'measure' = (prior?.plateMode as 'sheet' | 'measure') ?? 'sheet';
+      const modeSel = h('select', {},
+        h('option', { value: 'sheet', selected: mode === 'sheet' }, 'I used the author\'s spreadsheet — I\'ll enter its scale-error result'),
+        h('option', { value: 'measure', selected: mode === 'measure' }, 'I\'ll enter caliper measurements and let the wizard calculate'));
+      const scaleErr = numberInput({ value: prior?.scaleError ?? '', step: 0.01, placeholder: 'e.g. -0.54' });
+      const nomA = numberInput({ value: prior?.nomA ?? 150, step: 1 });
+      const measA = numberInput({ value: prior?.measA ?? '', step: 0.01, placeholder: 'e.g. 149.2' });
+      const nomB = numberInput({ value: prior?.nomB ?? 140, step: 1 });
+      const measB = numberInput({ value: prior?.measB ?? '', step: 0.01, placeholder: 'optional second feature' });
+
+      const sheetWrap = h('div', {},
+        field('Scale error from the spreadsheet (%)', scaleErr,
+          'The sheet\'s "Calculated scale error" row (or "Avg scale error" if you skipped the radial-comp section), as a percentage — a small number near zero, usually negative (e.g. −0.67% shrinkage → enter -0.67). The wizard converts it: shrinkage% = 100 + error.'));
+      const measureWrap = h('div', { style: 'display:none' },
+        h('p', { class: 'field-help' }, 'Measure two of the plate\'s larger features (defaults: the 150 mm between-squares span and the 140 mm between-diamonds span). One feature works; two get averaged.'),
+        h('div', { class: 'field-row' },
+          field('Feature A nominal (mm)', nomA), field('Feature A measured (mm)', measA)),
+        h('div', { class: 'field-row' },
+          field('Feature B nominal (mm)', nomB), field('Feature B measured (mm)', measB, 'Leave empty to use feature A alone.')));
+      const sync = () => {
+        mode = modeSel.value as 'sheet' | 'measure';
+        sheetWrap.style.display = mode === 'sheet' ? '' : 'none';
+        measureWrap.style.display = mode === 'measure' ? '' : 'none';
+      };
+      modeSel.addEventListener('change', sync); sync();
+
+      el.append(field('How are you reporting the result?', modeSel), sheetWrap, measureWrap);
+      return {
+        el,
+        collect() {
+          const issues: ValidationIssue[] = [];
+          const data: Record<string, unknown> = { plateMode: mode };
+          if (mode === 'sheet') {
+            issues.push(...validateNumber(scaleErr.value, { label: 'Scale error', min: -10, max: 10 }));
+            data.scaleError = num(scaleErr.value);
+          } else {
+            issues.push(...validateNumber(nomA.value, { label: 'Feature A nominal', min: 10, max: 500 }));
+            issues.push(...validateNumber(measA.value, { label: 'Feature A measured', min: 1, max: 600 }));
+            data.nomA = num(nomA.value); data.measA = num(measA.value);
+            if (measB.value !== '') {
+              issues.push(...validateNumber(nomB.value, { label: 'Feature B nominal', min: 10, max: 500 }));
+              issues.push(...validateNumber(measB.value, { label: 'Feature B measured', min: 1, max: 600 }));
+              data.nomB = num(nomB.value); data.measB = num(measB.value);
+            } else {
+              data.measB = '';
+            }
+          }
+          return { data, issues };
+        }
+      };
+    }
+
+    // --- direct % (CaliFlower calculator) or measured object ----------------
+    const direct = entry !== 'measured';
     const xIn = numberInput({ value: prior?.x ?? '', step: 0.01, placeholder: direct ? 'e.g. 99.4' : 'e.g. 99.42' });
     const yIn = numberInput({ value: prior?.y ?? '', step: 0.01, placeholder: 'optional — leave empty to reuse X' });
-    const el = h('div', {},
+    el.append(
       direct
-        ? h('p', {}, 'Read the shrinkage percentage(s) off the tool\'s scale (after full cooldown).')
+        ? h('p', {}, 'Enter the shrinkage percentage(s) from the tool\'s calculator (after measuring the fully cooled part).')
         : h('p', {}, `Measure the printed object with calipers — above the first layers, not across the base flare. Nominal sizes: X ${settings.nominalX} mm, Y ${settings.nominalY} mm.`),
       h('div', { class: 'field-row' },
         field(direct ? 'Shrinkage X (%)' : 'Measured X (mm)', xIn),
         field(direct ? 'Shrinkage Y (%)' : 'Measured Y (mm)', yIn, 'If your tool/measurement only gives one number, leave Y empty.')
-      ),
-      ctx.coach ? h('details', { class: 'why' },
+      )
+    );
+    if (ctx.coach) {
+      el.append(h('details', { class: 'why' },
         h('summary', {}, '🤔 My X and Y disagree'),
         h('div', { class: 'why-body' },
           h('p', {}, 'Filament shrinks the same in every direction — it has no idea which way X is. A real X/Y difference means the PRINTER is drawing rectangles that aren\'t quite square or true to size: belt tension, frame squareness, or skew. Small differences (≤0.2%) are normal; beyond ~0.5%, fix the mechanics before compensating in the filament profile.')
-        )) : null
-    );
+        )));
+    }
     return {
       el,
       collect() {
@@ -811,7 +889,22 @@ const shrinkageController: TestController = {
   compute(ctx, settings, result) {
     const calcs: CalcResult[] = [];
     let xPct: number, yPct: number;
-    if (settings.entry === 'measured') {
+    if (settings.entry === 'plate' && result.plateMode === 'sheet') {
+      const c = shrinkageFromScaleError(num(result.scaleError));
+      calcs.push(c);
+      xPct = yPct = c.rounded;
+    } else if (settings.entry === 'plate') {
+      const ca = shrinkageFromMeasurement(num(result.nomA), num(result.measA));
+      calcs.push(ca);
+      xPct = ca.rounded;
+      if (result.measB !== '' && result.measB !== undefined) {
+        const cb = shrinkageFromMeasurement(num(result.nomB), num(result.measB));
+        calcs.push(cb);
+        yPct = cb.rounded;
+      } else {
+        yPct = xPct;
+      }
+    } else if (settings.entry === 'measured') {
       const cx = shrinkageFromMeasurement(num(settings.nominalX), num(result.x));
       calcs.push(cx);
       xPct = cx.rounded;
@@ -827,8 +920,8 @@ const shrinkageController: TestController = {
       yPct = result.y !== '' && result.y !== undefined ? roundTo(num(result.y), 2) : xPct;
     }
     const combined = shrinkageCombined(xPct, yPct);
-    calcs.push(combined);
-    const warnings = calcs.flatMap(c => c.warnings);
+    if (xPct !== yPct || calcs.length !== 1) calcs.push(combined);
+    const warnings = [...new Set(calcs.flatMap(c => c.warnings))];
     return {
       calcs,
       computed: { shrinkageX: xPct, shrinkageY: yPct, shrinkagePercent: combined.rounded },

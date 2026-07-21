@@ -3,6 +3,8 @@ import { listPrinters, createProject, saveProject, loadSettings } from '../stora
 import { MATERIALS, getMaterial } from '../data/materials';
 import { slicerVersionOptions } from '../data/slicers';
 import { navigate } from '../app';
+import * as bridge from '../slicerIntegration/bridge';
+import type { IntegrationSlicerId } from '../slicerIntegration/types';
 import type { MaterialId, SlicerId, ExperienceMode } from '../types';
 
 export async function renderNewProject(root: HTMLElement): Promise<void> {
@@ -34,9 +36,37 @@ export async function renderNewProject(root: HTMLElement): Promise<void> {
     h('option', { value: 'plated/coated' }, 'Plated / coated'),
     h('option', { value: 'ruby/tungsten' }, 'Ruby / tungsten tip'),
     h('option', { value: 'other' }, 'Other / unknown'));
-  const startingProfile = h('input', { type: 'text', placeholder: 'e.g. Generic PLA @ your printer' });
+  const startingProfile = h('input', { type: 'text', placeholder: 'e.g. Generic PLA @ your printer', list: 'starting-profile-options' });
+  const profileOptions = h('datalist', { id: 'starting-profile-options' });
   const slicerSel = h('select', {}, slicerVersionOptions().map(o =>
     h('option', { value: `${o.slicer}|${o.version}` }, o.label)));
+
+  // Desktop: suggest the profiles actually present in the selected slicer, so
+  // the wizard can later tell the user exactly which preset to modify.
+  const refreshProfileOptions = async () => {
+    if (!bridge.isDesktop()) return;
+    clear(profileOptions);
+    try {
+      const [wizSlicer] = slicerSel.value.split('|');
+      const detected = await bridge.detectSupportedSlicers();
+      const inst = detected.find(d => d.slicer_id === wizSlicer);
+      const loc = inst?.user_locations[0];
+      if (!inst || !loc) return;
+      const files = await bridge.scanSlicerProfiles(inst.slicer_id as IntegrationSlicerId, loc.account_id);
+      const names = new Set<string>();
+      for (const f of files) {
+        if ((f.dir_kind as string) !== 'user' && (f.dir_kind as string) !== 'system') continue;
+        try {
+          const nm = (JSON.parse(f.json) as { name?: string }).name;
+          if (nm) names.add(nm);
+        } catch { /* skip unparseable presets */ }
+      }
+      [...names].sort((a, b) => a.localeCompare(b)).slice(0, 500)
+        .forEach(n => profileOptions.append(h('option', { value: n })));
+    } catch { /* scan is best-effort; free text always works */ }
+  };
+  slicerSel.addEventListener('change', () => void refreshProfileOptions());
+  void refreshProfileOptions();
   const notes = h('textarea', { placeholder: 'Anything worth remembering about this spool (age, storage, prior drying…)' });
   const dateInput = h('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });
 
@@ -100,9 +130,10 @@ export async function renderNewProject(root: HTMLElement): Promise<void> {
       ),
       h('div', { class: 'field-row' },
         field('Slicer & version *', slicerSel, 'Instructions are version-aware; pick what you actually run.'),
-        field('Starting filament profile', startingProfile, 'The slicer preset you\'ll clone from — usually a "Generic <material>" profile.'),
+        field('Starting filament profile', startingProfile, 'The preset you\'ll be modifying as you calibrate — usually a "Generic <material>" profile. Each test will remind you to save values into THIS preset. (Desktop app: suggestions come from the profiles detected in your slicer.)'),
         field('Calibration date', dateInput)
-      )
+      ),
+      profileOptions
     ),
     h('div', { class: 'card' },
       h('h2', { style: 'margin-top:0' }, 'Guidance level'),

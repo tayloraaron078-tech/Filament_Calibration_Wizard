@@ -1,7 +1,7 @@
 import type { SlicerId, SlicerVersionContent } from '../types';
 
 const BAMBU_DEVELOPER_MODE_BEST_PATH =
-  'Best path for Bambu printers: enable Bambu Studio Developer mode first. Developer mode keeps your Bambu printer selected while exposing the manual calibration tests: Temperature, Flow Rate coarse/fine (no YOLO), Pressure Advance / Flow Dynamics, Retraction, Max Flow Rate, and VFA.';
+  'Best path for Bambu printers: enable Developer mode first — Bambu Studio → Preferences → check the box labeled "Develop Mode" (yes, it really says "Develop Mode", not "Developer Mode" — a translation quirk). Once enabled, a Calibration button appears in the TITLE BAR next to the Redo (↷) arrow — the same Calibration menu all Orca-based slicers have, just with slightly different entries. The manual calibration tests (Temperature, Flow Rate coarse/fine — no YOLO, Pressure Advance / Flow Dynamics, Retraction, Max Flow Rate, and VFA) all live in that title-bar menu, and your Bambu printer stays selected the whole time.';
 
 const BAMBU_NON_BAMBU_FALLBACK =
   'Fallback only: if you cannot or do not want to use Developer mode, temporarily select any non–Bambu-Lab printer profile to reveal the same Calibration tests, create/run the test, then switch back to your Bambu printer before saving values or doing normal prints.';
@@ -214,19 +214,21 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
     version: '1.7+',
     verifiedOn: '2026-07-19',
     docsUrl: 'https://wiki.bambulab.com/en/software/bambu-studio/manual-calibration',
-    // NOTE: In current Bambu Studio (verified 2.7.x), Developer mode exposes
-    // Bambu's manual calibration tests while a Bambu Lab printer is selected.
-    // Temporarily selecting a non–Bambu-Lab printer profile remains documented
-    // only as a fallback for users who cannot enable Developer mode (issue #1).
-    calibrationMenuPath: 'Calibration menu (top bar) — enable Developer mode if tests are hidden with a Bambu printer selected',
+    // NOTE: In current Bambu Studio (verified 2.7.x), enabling Preferences →
+    // "Develop Mode" (their label) adds a Calibration button to the title bar
+    // (next to the Redo arrow) exposing the manual tests while a Bambu Lab
+    // printer stays selected. Temporarily selecting a non–Bambu-Lab printer
+    // profile remains documented only as a fallback for users who cannot
+    // enable Develop Mode (issue #1).
+    calibrationMenuPath: 'Title bar → Calibration button (next to the Redo arrow; appears after enabling "Develop Mode" in Preferences)',
     perTest: {
       temperature: {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Temperature',
+        menuPath: 'Title bar → Calibration → Temperature (button appears after enabling Develop Mode)',
         steps: [
           'Select the Bambu printer and the filament preset you are calibrating.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the Calibration tab and choose the Temperature test.',
+          'Open the title-bar Calibration menu and choose the Temperature test.',
           'Set the start and end temperatures from the range below (5 °C steps).',
           'Slice and print the tower.',
           'Pick the best block using the evaluation guide.'
@@ -245,11 +247,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-pass1': {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Flow Rate → Coarse (Pass 1)',
+        menuPath: 'Title bar → Calibration → Flow Rate → Coarse (Pass 1)',
         steps: [
           'Select the Bambu printer and the filament preset to calibrate (its current flow ratio is the baseline).',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the Calibration tab → Flow Rate and choose the coarse test (Pass 1). Manual mode prints blocks with modifiers around ±20% in 5% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
+          'Open the title-bar Calibration menu → Flow Rate and choose the coarse test (Pass 1). Manual mode prints blocks with modifiers around ±20% in 5% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
           'X1/P1 with lidar also offer automatic flow calibration — this wizard covers the MANUAL path so you stay in control of the judgment.',
           'Slice and print; pick the smoothest block.',
           'New ratio = old × (100 + modifier) / 100 — computed for you below.'
@@ -267,11 +269,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-pass2': {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Flow Rate → Fine (Pass 2)',
+        menuPath: 'Title bar → Calibration → Flow Rate → Fine (Pass 2)',
         steps: [
           'Verify the coarse result is saved in the filament preset.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open Calibration tab → Flow Rate → fine calibration: blocks from −9% to 0% in 1% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
+          'Open the title-bar Calibration menu → Flow Rate → fine calibration: blocks from −9% to 0% in 1% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
           'Slice, print, pick the best block; final ratio = saved ratio × (100 + modifier) / 100.'
         ],
         saveTo: {
@@ -287,11 +289,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'pressure-advance': {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Flow Dynamics',
+        menuPath: 'Title bar → Calibration → Flow Dynamics',
         steps: [
           'Bambu Studio calls Pressure Advance "Flow Dynamics Calibration"; the value is the K factor.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the Calibration tab → Flow Dynamics. Choose Manual mode (lidar-equipped X1/P1 can run Automatic, but manual keeps you in control and works for every material).',
+          'Open the title-bar Calibration menu → Flow Dynamics. Choose Manual mode (lidar-equipped X1/P1 can run Automatic, but manual keeps you in control and works for every material).',
           'The manual test prints a series of labeled lines at increasing K values.',
           'Pick the line with the most uniform width — no bulges at speed changes, no thin breaks.',
           'Enter the K value in the result step; it is usually labeled directly on the plate.'
@@ -310,11 +312,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-verify': {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Flow Rate → Fine (Pass 2)',
+        menuPath: 'Title bar → Calibration → Flow Rate → Fine (Pass 2)',
         steps: [
           'Verify BOTH your calibrated flow ratio AND the new K factor (Flow Dynamics) are saved — this re-check tests flow under the new pressure timing.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open Calibration tab → Flow Rate → fine calibration (−9% to 0%, 1% steps) — the same plate as the earlier fine pass.',
+          'Open the title-bar Calibration menu → Flow Rate → fine calibration (−9% to 0%, 1% steps) — the same plate as the earlier fine pass.',
           'Slice, print, pick the smoothest block. The 0% block winning means your flow ratio is confirmed.'
         ],
         saveTo: {
@@ -327,11 +329,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       retraction: {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Retraction test (Developer mode)',
+        menuPath: 'Title bar → Calibration → Retraction test (Develop Mode)',
         steps: [
           'Select the Bambu printer, filament preset, and normal process profile.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the Calibration tab and choose the Retraction test.',
+          'Open the title-bar Calibration menu and choose the Retraction test.',
           'Run the generated stringing/retraction test, changing one variable at a time: distance first, then speed if needed.',
           'If Developer mode is not available, fall back to Orca Slicer or an external stringing test model and copy the resulting distance/speed into Bambu Studio.'
         ],
@@ -345,11 +347,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'max-volumetric-speed': {
         available: true, builtIn: true,
-        menuPath: 'Calibration tab → Max Flow Rate (Developer mode)',
+        menuPath: 'Title bar → Calibration → Max Flow Rate (Develop Mode)',
         steps: [
           'Select the Bambu printer and the filament preset with calibrated temperature and flow saved.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the Calibration tab and choose Max Flow Rate.',
+          'Open the title-bar Calibration menu and choose Max Flow Rate.',
           'Slice and print the generated max-flow test; note where surface quality, layer bonding, or extruder sounds first degrade.',
           'Use the last good flow as the raw result, then enter a conservative production value with safety margin in the filament preset.',
           'Developer mode also exposes VFA calibration in Bambu Studio. PerfectFit does not currently score VFA as a separate wizard step, but you can run it from the same Calibration area when diagnosing speed-related ringing or vertical fine artifacts.'

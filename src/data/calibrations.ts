@@ -342,18 +342,18 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
       'shrinkage is 99.4% and the slicer scales all XY geometry up by 100/99.4 to compensate. ' +
       'This is different from flow calibration: flow errors change line width everywhere (surfaces look ' +
       'wrong), shrinkage scales the whole part (surfaces look fine, dimensions are off). ' +
-      'Measure on a large part — on a 20 mm cube, 0.5% shrinkage is 0.1 mm, within measurement noise; ' +
-      'on 100 mm+ it\'s half a millimeter and clearly readable. Dedicated tools with a vernier scale let ' +
-      'you read the percentage directly without calipers.',
+      'Measure on large features — on a 20 mm cube, 0.5% shrinkage is 0.1 mm, within measurement noise; ' +
+      'at 100–150 mm it\'s half a millimeter and clearly readable. Dedicated calibration plates average ' +
+      'several features of known size, which beats a single measurement.',
     dependencies: ['temperature', 'flow-pass1'],
     prerequisites: [
       { id: 'temp-flow-locked', label: 'Temperature and flow are calibrated and saved', coachNote: 'Over-extrusion inflates dimensions and corrupts the shrinkage measurement.' },
       { id: 'cooled-down', label: 'You\'ll measure the part only after it has FULLY cooled to room temperature', coachNote: 'Parts keep contracting for a while after printing — measuring a warm part understates shrinkage. For enclosure materials (ABS/ASA), wait until the part is genuinely at room temp.' },
-      { id: 'measuring-tool', label: 'Calipers available (unless using a direct-reading tool)', coachNote: 'The Printables shrinkage tool reads the percentage off a printed vernier scale — no calipers needed. For plain test objects you need calipers.' }
+      { id: 'measuring-tool', label: 'Digital calipers available', coachNote: 'Every shrinkage method is measured with calipers. Jaws that open to 150 mm are ideal — the free calibration plate\'s largest span is 150 mm (smaller features still work with shorter calipers).' }
     ],
     methods: [
-      { id: 'vernier-tool', label: 'Shrinkage calculator tool (Printables, free)', description: 'A free two-piece tool by Vector 3D: print it, assemble, and read the shrinkage percentage directly off its vernier scale — no calipers, no math.', slicers: ['orca', 'bambu'], recommended: true },
-      { id: 'calilantern', label: 'CaliLantern MK2 (Vector3D, paid)', description: 'A paid but excellent all-in-one dimensional tool: XY shrinkage, Z accuracy, and frame squareness from one print. Worth it if you calibrate many filaments.', slicers: ['orca', 'bambu'] },
+      { id: 'vernier-tool', label: 'Shrinkage calibration plate (ap.engineering on Printables, free)', description: 'A free plate of squares and diamonds at known sizes (150/140/90/80/35/25 mm). Measure the features with calipers; the author\'s companion spreadsheet averages the scale error and separates out horizontal-size (radial) error — or skip the spreadsheet and enter two measurements here.', slicers: ['orca', 'bambu'], recommended: true },
+      { id: 'calilantern', label: 'CaliFlower MK2 (Vector3D, paid)', description: 'A paid but excellent XY dimensional tool: measure it with calipers and Vector3D\'s calculator gives precise shrinkage (and detects printer skew). Worth it if you calibrate many filaments.', slicers: ['orca', 'bambu'] },
       { id: 'measured-object', label: 'Measure any large test object', description: 'Print a large simple object of known size (≥100 mm in X and Y if possible), measure with calipers after cooling, and enter nominal + measured below.', slicers: ['orca', 'bambu'] }
     ],
     evaluationGuide: [

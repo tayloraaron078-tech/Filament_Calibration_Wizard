@@ -3,7 +3,7 @@ import {
   flowYolo, flowPercent, looksLikePercentage, paTower, paFromSample,
   retractionFromHeight, mvsFromHeight, mvsProduction, volumetricFlow,
   maxSpeedForFlow, tempForBlock, generateRange, roundTo,
-  shrinkageFromMeasurement, shrinkageCombined
+  shrinkageFromMeasurement, shrinkageCombined, shrinkageFromScaleError
 } from '../src/logic/formulas';
 
 describe('flow ratio formulas (official Orca wiki examples)', () => {
@@ -208,5 +208,22 @@ describe('shrinkage formulas', () => {
   it('X/Y disagreement beyond 0.5% flags printer mechanics', () => {
     const r = shrinkageCombined(99.9, 99.1);
     expect(r.warnings.some(w => w.includes('mechanics'))).toBe(true);
+  });
+
+  it('scale error from the ap.engineering spreadsheet converts to shrinkage%', () => {
+    // Sheet example: Calculated scale error −0.673% → shrinkage 99.33%.
+    const r = shrinkageFromScaleError(-0.673);
+    expect(r.rounded).toBe(99.33);
+    expect(r.warnings).toHaveLength(0);
+  });
+
+  it('positive scale error (expansion) warns about over-extrusion', () => {
+    const r = shrinkageFromScaleError(0.8);
+    expect(r.warnings.some(w => w.includes('over-extrusion'))).toBe(true);
+  });
+
+  it('entering a shrinkage percentage instead of an error is caught', () => {
+    const r = shrinkageFromScaleError(99.5);
+    expect(r.warnings.some(w => w.includes('scale ERROR'))).toBe(true);
   });
 });
