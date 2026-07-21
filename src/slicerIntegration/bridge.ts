@@ -129,6 +129,12 @@ export function verifyGeneratedProfile(path: string, expectedJson: string): Prom
   return invoke('verify_generated_profile', { path, expectedJson });
 }
 
+export function backupSlicerUserPresets(
+  slicerId: IntegrationSlicerId, accountId: string, projectId: string
+): Promise<RawBackupSummary> {
+  return invoke('backup_slicer_user_presets', { slicerId, accountId, projectId });
+}
+
 export function listProfileBackups(): Promise<RawBackupSummary[]> {
   return invoke('list_profile_backups');
 }

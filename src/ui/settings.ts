@@ -6,6 +6,7 @@ import { applyTheme } from '../app';
 import { idb } from '../storage/db';
 import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerIntegration/featureFlags';
 import * as bridge from '../slicerIntegration/bridge';
+import { backupDetectedPresetLibraries, totalFileCount } from '../slicerIntegration/libraryBackup';
 
 export function renderSettings(root: HTMLElement): void {
   const s = loadSettings();
@@ -127,13 +128,30 @@ function experimentalCard(): HTMLElement {
 function slicerBackupsCard(): HTMLElement {
   const card = h('div', { class: 'card' },
     h('h2', { style: 'margin-top:0' }, '🗄 Slicer profile backups'),
-    h('p', { class: 'field-help' }, 'Before installing a profile, PerfectFit backs up the affected slicer files with checksums. Restore puts the original files back exactly as they were.'));
+    h('p', { class: 'field-help' }, 'Before installing a profile, PerfectFit backs up the affected slicer files with checksums. You can also snapshot your entire user preset library (filament, printer, and process presets) at any time. Restore puts the original files back exactly as they were.'));
   if (!bridge.isDesktop()) {
     card.append(h('p', { class: 'field-help' }, 'Available in the PerfectFit desktop app.'));
     return card;
   }
   const host = h('div', {});
-  card.append(host);
+  const backupNowBtn = h('button', {
+    class: 'btn', onClick: async () => {
+      backupNowBtn.disabled = true;
+      backupNowBtn.textContent = 'Backing up…';
+      try {
+        const o = await backupDetectedPresetLibraries('manual');
+        if (o.backups.length) toast(`Backed up ${totalFileCount(o)} preset file(s) across ${o.backups.length} location(s).`, 'success');
+        else toast(`No presets were backed up. ${o.notes.join(' ') || 'No supported slicer was detected.'}`, 'error');
+        await refresh();
+      } catch (e) {
+        toast(`Backup failed: ${String(e)}`, 'error');
+      } finally {
+        backupNowBtn.disabled = false;
+        backupNowBtn.textContent = '🗄 Back up all slicer presets now';
+      }
+    }
+  }, '🗄 Back up all slicer presets now') as HTMLButtonElement;
+  card.append(h('div', { class: 'btn-row' }, backupNowBtn), host);
   const refresh = async () => {
     clear(host);
     let backups;
@@ -163,7 +181,7 @@ function slicerBackupsCard(): HTMLElement {
             class: 'btn btn-sm', onClick: async () => {
               const ok = await confirmDialog({
                 title: 'Restore this backup?',
-                body: `Restores the slicer files exactly as they were before installing “${b.installed_profile_name}”. The profile installed at that time will be removed. Close the slicer first.`,
+                body: `Restores the slicer files covered by “${b.installed_profile_name}” exactly as they were when this backup was made (${b.file_count} file(s)). Files this backup recorded as not-yet-existing will be removed. Close the slicer first.`,
                 confirmLabel: 'Restore'
               });
               if (!ok) return;

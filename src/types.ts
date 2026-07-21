@@ -108,6 +108,20 @@ export interface CalibrationProject {
    * Absent on v1 projects; normalized to [] on load/import.
    */
   generatedProfiles?: import('./slicerIntegration/types').GeneratedProfileRecord[];
+  /**
+   * Outcome of the pre-calibration slicer preset backup prompt (optional;
+   * absent on older projects). Present once the user backed up or dismissed.
+   */
+  presetBackup?: PresetBackupRecord;
+}
+
+/** Result of the "back up your slicer presets before calibrating" prompt. */
+export interface PresetBackupRecord {
+  status: 'done' | 'skipped';
+  at: string;
+  /** Ids in the desktop backup store (Settings → Slicer profile backups). */
+  backupIds: string[];
+  fileCount: number;
 }
 
 export interface FinalValues {

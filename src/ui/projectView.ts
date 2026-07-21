@@ -7,6 +7,7 @@ import { exportProject } from '../export/backup';
 import { copyFinalsToClipboard } from './report';
 import { STEP_DEPENDENCY_WARNINGS } from '../logic/ranges';
 import { getMaterial } from '../data/materials';
+import { presetBackupCallout } from './presetBackupPrompt';
 import type { CalibrationProject, CalibrationId } from '../types';
 
 export async function renderProject(root: HTMLElement, id: string): Promise<void> {
@@ -60,6 +61,12 @@ export async function renderProject(root: HTMLElement, id: string): Promise<void
       h('button', { class: 'btn', onClick: async () => download(`perfectfit-${p.id.slice(0, 8)}.json`, await exportProject(p, printer)) }, '⭳ Export JSON')
     )
   );
+
+  // --- pre-calibration slicer preset backup prompt ---
+  if (stage) {
+    const backupPrompt = presetBackupCallout(p, rerender);
+    if (backupPrompt) root.append(backupPrompt);
+  }
 
   // --- calibration complete: profile call-to-action ---
   if (!stage && hasCalibratedValues(p)) {

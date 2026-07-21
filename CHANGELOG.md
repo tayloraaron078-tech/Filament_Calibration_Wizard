@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+Backups now happen where the risk actually starts. Until now the only automatic backup was made at the very end of the flow, when a generated profile was installed — but the wizard directs you to hand-edit your filament and printer profiles from the first calibration step onward, and none of those files were protected. Prompted by a Discord suggestion that profile backups should be offered up front, not only at install time.
+
+### Added
+
+- **Whole-library preset snapshots.** A new native command backs up every user preset (`filament/`, `machine/`, and `process/` folders of each slicer account) into the existing checksummed backup store — same manifest format, so the Settings list, verified restore, and delete all work unchanged. Slicer-managed `base/` caches and non-preset files are excluded.
+- **Pre-calibration backup prompt on every project.** Projects with remaining calibration steps show a callout offering a one-click snapshot of the project's slicer presets (falling back to all detected slicers) before any profile edits are suggested. The outcome — backed up or skipped — is recorded on the project and in its timeline. The browser build, which cannot write backups, shows manual backup guidance instead.
+- **First-run backup prompt.** On first use of the desktop app (once a slicer with user presets is detected), the dashboard offers to back up all detected slicers' preset libraries. Shown once; dismissible.
+- **Manual snapshots in Settings.** "Back up all slicer presets now" in Settings → Slicer profile backups snapshots every detected slicer on demand.
+
 ## 1.1.5 - 2026-07-20
 
 Fixes generated Bambu profiles still not appearing in the slicer when cloned from a stock (system) preset — the normal path since 1.1.4 started recommending stock baselines. Diagnosed against a real signed-in Bambu Studio 2.7.x install (H2S). See [docs/RELEASE_NOTES_1.1.5.md](docs/RELEASE_NOTES_1.1.5.md).
