@@ -2,6 +2,8 @@
 
 Create a perfectly calibrated filament profile for Orca Slicer or Bambu Studio in one guided workflow. No tutorials, no guesswork, no spreadsheets.
 
+<img width="1148" height="1007" alt="Hero" src="https://github.com/user-attachments/assets/f56b6877-6558-460a-9df0-097523c63046" />
+
 A local-first web app that walks you step by step through calibrating a filament profile
 for **Orca Slicer** (default) or **Bambu Studio** — temperature, flow ratio (two passes),
 pressure advance, retraction, max volumetric speed, and a final verification print —
@@ -15,6 +17,8 @@ without tutorials, wikis, or guesswork.
   printable one-page calibration card with QR, printable full report, JSON backup/restore.
 - **Privacy**: no account, no backend, no analytics/telemetry. Everything (photos included)
   stays in your browser's local storage. External model links open third-party sites.
+
+<img width="1102" height="831" alt="Create Project" src="https://github.com/user-attachments/assets/36fc37fd-c053-4746-814b-48919f965853" />
 
 ## Requirements
 
@@ -34,6 +38,8 @@ npm test             # vitest: formulas, ranges, numbering, margins, import/expo
 ```
 
 A human-workflow checklist lives in [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
+
+<img width="1103" height="835" alt="Wizard Page" src="https://github.com/user-attachments/assets/6ed5ee39-3db5-4761-bfb9-c39a10259c3d" />
 
 ## Production build
 
@@ -167,6 +173,9 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
   rather than pretending.
 - Suggested ranges are conservative starting points, not guarantees — spool labels and
   datasheets always win.
+
+<img width="1103" height="833" alt="Auto Results" src="https://github.com/user-attachments/assets/fa9ebd12-6d73-42b2-8d50-2e8a2825b278" />
+
 
 ## Future ideas
 
