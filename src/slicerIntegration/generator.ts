@@ -40,7 +40,7 @@ export function buildPatchesFromProject(project: CalibrationProject): Calibrated
       });
     }
   }
-  if ((done('flow-pass2') || done('flow-pass1')) && finals.flowRatio !== undefined) {
+  if ((done('flow-verify') || done('flow-pass2') || done('flow-pass1')) && finals.flowRatio !== undefined) {
     out.push({
       sourceKey: 'flowRatio', presetKey: 'filament_flow_ratio',
       label: 'Flow ratio', value: finals.flowRatio, unit: ''
@@ -73,6 +73,13 @@ export function buildPatchesFromProject(project: CalibrationProject): Calibrated
     out.push({
       sourceKey: 'maxVolumetricSpeed', presetKey: 'filament_max_volumetric_speed',
       label: 'Maximum volumetric speed', value: finals.maxVolumetricSpeed, unit: 'mm³/s'
+    });
+  }
+  // Orca-family presets store shrinkage as a percent string (e.g. "99.4%").
+  if (done('shrinkage') && finals.shrinkagePercent !== undefined) {
+    out.push({
+      sourceKey: 'shrinkagePercent', presetKey: 'filament_shrink',
+      label: 'Shrinkage (XY)', value: finals.shrinkagePercent, unit: '%', valueSuffix: '%'
     });
   }
   return out;

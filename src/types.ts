@@ -17,8 +17,10 @@ export type CalibrationId =
   | 'flow-pass1'
   | 'flow-pass2'
   | 'pressure-advance'
+  | 'flow-verify'
   | 'retraction'
   | 'max-volumetric-speed'
+  | 'shrinkage'
   | 'final-verification';
 
 export type StepStatus = 'not-started' | 'in-progress' | 'completed' | 'skipped';
@@ -134,6 +136,8 @@ export interface FinalValues {
   retractionDistance?: number;
   retractionSpeed?: number;
   maxVolumetricSpeed?: number;
+  /** Measured XY shrinkage as a percentage of nominal size (e.g. 99.4). */
+  shrinkagePercent?: number;
 }
 
 export interface CalibrationStepState {

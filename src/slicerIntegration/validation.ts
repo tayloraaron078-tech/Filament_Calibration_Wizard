@@ -114,7 +114,8 @@ export function validateGeneratedProfile(
     warnings.push(warn('NO_CHANGES', 'No calibrated values were applied — the new profile is an identical copy of the base.', true));
   }
   for (const c of generated.changedFields) {
-    const n = Number(c.after);
+    // Percent-typed fields (e.g. filament_shrink "99.4%") carry a % suffix.
+    const n = Number(String(c.after).replace(/%$/, ''));
     if (!Number.isFinite(n)) {
       errors.push(err('NON_FINITE', `${c.label}: value "${c.after}" is not a finite number.`));
     }
@@ -124,7 +125,7 @@ export function validateGeneratedProfile(
   const printer = ctx.printer;
   const get = (key: string): number | undefined => {
     const c = generated.changedFields.find(f => f.presetKey === key);
-    return c ? Number(c.after) : undefined;
+    return c ? Number(String(c.after).replace(/%$/, '')) : undefined;
   };
   const nozzleTemp = get('nozzle_temperature');
   if (nozzleTemp !== undefined) {
@@ -157,6 +158,11 @@ export function validateGeneratedProfile(
       warnings.push(warn('MVS_OVER_PRINTER',
         `Calibrated max volumetric speed (${mvs} mm³/s) exceeds the printer profile's stated capability (${printer.maxVolumetricFlow} mm³/s). Install only if you trust the calibration result.`, true));
     }
+  }
+
+  const shrink = get('filament_shrink');
+  if (shrink !== undefined && (shrink < 90 || shrink > 102)) {
+    errors.push(err('SHRINK_IMPLAUSIBLE', `Shrinkage ${shrink}% is outside the plausible range (90–102%).`));
   }
 
   // --- material match ---------------------------------------------------------

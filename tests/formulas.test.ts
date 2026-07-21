@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   flowYolo, flowPercent, looksLikePercentage, paTower, paFromSample,
   retractionFromHeight, mvsFromHeight, mvsProduction, volumetricFlow,
-  maxSpeedForFlow, tempForBlock, generateRange, roundTo
+  maxSpeedForFlow, tempForBlock, generateRange, roundTo,
+  shrinkageFromMeasurement, shrinkageCombined
 } from '../src/logic/formulas';
 
 describe('flow ratio formulas (official Orca wiki examples)', () => {
@@ -166,5 +167,46 @@ describe('rounding', () => {
   it('roundTo handles typical float noise', () => {
     expect(roundTo(0.1 + 0.2, 2)).toBe(0.3);
     expect(roundTo(1.0295, 3)).toBe(1.03);
+  });
+});
+
+describe('shrinkage formulas', () => {
+  it('measured 99.4 on nominal 100 → 99.4% (slicer field semantics)', () => {
+    const r = shrinkageFromMeasurement(100, 99.4);
+    expect(r.rounded).toBe(99.4);
+    expect(r.unit).toBe('%');
+    expect(r.warnings).toHaveLength(0);
+  });
+
+  it('non-100 nominal sizes work', () => {
+    const r = shrinkageFromMeasurement(150, 148.8);
+    expect(r.rounded).toBe(99.2);
+  });
+
+  it('expansion beyond 0.5% warns about over-extrusion/elephant foot', () => {
+    const r = shrinkageFromMeasurement(100, 100.8);
+    expect(r.warnings.some(w => w.includes('over-extrusion'))).toBe(true);
+  });
+
+  it('extreme shrinkage warns to re-measure', () => {
+    const r = shrinkageFromMeasurement(100, 96);
+    expect(r.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('invalid inputs rejected without NaN output', () => {
+    const r = shrinkageFromMeasurement(0, 99);
+    expect(r.warnings.length).toBeGreaterThan(0);
+    expect(Number.isFinite(r.rounded)).toBe(true);
+  });
+
+  it('combined X/Y averages the two axes', () => {
+    const r = shrinkageCombined(99.4, 99.2);
+    expect(r.rounded).toBe(99.3);
+    expect(r.warnings).toHaveLength(0);
+  });
+
+  it('X/Y disagreement beyond 0.5% flags printer mechanics', () => {
+    const r = shrinkageCombined(99.9, 99.1);
+    expect(r.warnings.some(w => w.includes('mechanics'))).toBe(true);
   });
 });

@@ -223,6 +223,47 @@ export function tempForBlock(startTemp: number, step: number, blockIndex: number
   };
 }
 
+// --- Shrinkage -------------------------------------------------------------
+
+/**
+ * Shrinkage% = measured / nominal × 100 — the exact semantics of the
+ * Orca/Bambu filament "Shrinkage" field (e.g. 99.4 mm measured on a 100 mm
+ * part → enter 99.4%; the slicer scales XY up by 100/99.4).
+ */
+export function shrinkageFromMeasurement(nominalMm: number, measuredMm: number): CalcResult {
+  const valid = nominalMm > 0 && measuredMm > 0;
+  const raw = valid ? (measuredMm / nominalMm) * 100 : 0;
+  const warnings: string[] = [];
+  if (!valid) warnings.push('Nominal and measured sizes must both be positive.');
+  if (valid && raw > 100.5) {
+    warnings.push('Measured LARGER than nominal by over 0.5% — that\'s expansion, which usually means over-extrusion or measuring across the elephant-foot base, not filament behavior. Re-measure above the base flare and double-check flow.');
+  }
+  if (valid && raw < 97) {
+    warnings.push('More than 3% shrinkage is extreme for common filaments — re-confirm the nominal size and re-measure before trusting this value.');
+  }
+  return {
+    inputs: { nominalMm, measuredMm },
+    formulaText: 'Shrinkage% = measured ÷ nominal × 100',
+    substituted: valid ? `${measuredMm} ÷ ${nominalMm} × 100 = ${raw.toFixed(3)}%` : 'undefined (invalid inputs)',
+    raw, rounded: roundTo(raw, 2), precision: 2, unit: '%', warnings
+  };
+}
+
+/** Combine X and Y shrinkage into the single value the slicer field takes. */
+export function shrinkageCombined(xPercent: number, yPercent: number): CalcResult {
+  const raw = (xPercent + yPercent) / 2;
+  const warnings: string[] = [];
+  if (Math.abs(xPercent - yPercent) > 0.5) {
+    warnings.push(`X (${xPercent}%) and Y (${yPercent}%) differ by more than 0.5% — filament shrinks equally in all directions, so a gap this large points at the printer\'s mechanics (belt tension, frame squareness), not the material. Fix that before trusting the average.`);
+  }
+  return {
+    inputs: { xPercent, yPercent },
+    formulaText: 'Shrinkage%(final) = (X% + Y%) ÷ 2',
+    substituted: `(${xPercent} + ${yPercent}) ÷ 2 = ${raw.toFixed(3)}%`,
+    raw, rounded: roundTo(raw, 2), precision: 2, unit: '%', warnings
+  };
+}
+
 // --- Range generation ------------------------------------------------------
 
 export interface GeneratedRange {

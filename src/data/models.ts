@@ -35,6 +35,28 @@ export const MODEL_MANIFEST: ModelManifestEntry[] = [
     fileType: 'STL'
   },
   {
+    test: 'Shrinkage (free, recommended)',
+    localFile: null,
+    bundled: false,
+    sourceUrl: 'https://www.printables.com/model/480907-shrinkage-calculator-dimensional-calibration-tool',
+    license: 'See model page (free to download and print)',
+    attribution: 'Vector 3D — Shrinkage Calculator / Dimensional Calibration Tool',
+    recommendedUse: 'Two-piece tool with a printed vernier scale: read the shrinkage percentage directly off the assembled parts — no calipers or math.',
+    slicerCompatibility: 'Any slicer (plain STL import; print at 100% scale with shrinkage compensation OFF)',
+    fileType: 'STL'
+  },
+  {
+    test: 'Shrinkage (paid, measures XY + Z + squareness)',
+    localFile: null,
+    bundled: false,
+    sourceUrl: 'https://vector3d.shop/products/calilantern-calibration-tool-mk2',
+    license: 'Commercial (purchase from Vector3D)',
+    attribution: 'Vector3D — CaliLantern Calibration Tool MK2',
+    recommendedUse: 'Paid but excellent all-in-one dimensional tool: XY shrinkage, Z accuracy, and frame squareness from a single print. Worth it if you calibrate many filaments.',
+    slicerCompatibility: 'Any slicer (print at 100% scale with shrinkage compensation OFF)',
+    fileType: 'STL (purchased download)'
+  },
+  {
     test: 'Max flow (Bambu Studio fallback)',
     localFile: null,
     bundled: false,

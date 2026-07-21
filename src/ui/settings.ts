@@ -49,8 +49,8 @@ export function renderSettings(root: HTMLElement): void {
         h('div', {}, h('strong', {}, 'Larger text'), h('p', { class: 'coach-note' }, 'Increases the base font size across the app.')))
     ),
     h('div', { class: 'card' },
-      h('h2', { style: 'margin-top:0' }, 'Backup & restore'),
-      h('p', { class: 'field-help' }, 'Everything lives in this browser\'s local storage. Clearing site data (or some browser cleanups) deletes it — export backups regularly.'),
+      h('h2', { style: 'margin-top:0' }, '💾 App data backup (projects & printers)'),
+      h('p', { class: 'field-help' }, 'Exports/restores PerfectFit\'s OWN data: calibration projects, printer profiles, and settings, as a JSON file you keep. Everything lives in this browser\'s local storage — clearing site data deletes it, so export regularly. (Looking for your slicer preset backups? They\'re in the "Slicer profile backups" card below.)'),
       h('div', { class: 'btn-row' },
         h('button', {
           class: 'btn btn-primary', onClick: async () => {
@@ -128,7 +128,7 @@ function experimentalCard(): HTMLElement {
 function slicerBackupsCard(): HTMLElement {
   const card = h('div', { class: 'card' },
     h('h2', { style: 'margin-top:0' }, '🗄 Slicer profile backups'),
-    h('p', { class: 'field-help' }, 'Before installing a profile, PerfectFit backs up the affected slicer files with checksums. You can also snapshot your entire user preset library (filament, printer, and process presets) at any time. Restore puts the original files back exactly as they were.'));
+    h('p', { class: 'field-help' }, 'Backups of your SLICER\'s preset files (Orca/Bambu filament, printer, and process profiles) — separate from the app data backup above. Before installing a profile, PerfectFit backs up the affected slicer files with checksums; you can also snapshot your entire user preset library at any time. Restore puts the original files back exactly as they were.'));
   if (!bridge.isDesktop()) {
     card.append(h('p', { class: 'field-help' }, 'Available in the PerfectFit desktop app.'));
     return card;

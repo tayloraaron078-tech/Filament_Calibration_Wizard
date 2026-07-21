@@ -233,6 +233,7 @@ function finalsSummary(p: CalibrationProject, sid: CalibrationId): string {
       return f.nozzleTemp !== undefined ? `Chosen: ${f.nozzleTemp} °C${f.firstLayerTemp ? ` (first layer ${f.firstLayerTemp} °C)` : ''}${f.highFlowTemp ? ` (high-flow ${f.highFlowTemp} °C)` : ''}` : '';
     case 'flow-pass1':
     case 'flow-pass2':
+    case 'flow-verify':
       return f.flowRatio !== undefined ? `Flow ratio: ${f.flowRatio}` : '';
     case 'pressure-advance':
       return f.pressureAdvance !== undefined ? `PA: ${f.pressureAdvance}` : '';
@@ -240,6 +241,8 @@ function finalsSummary(p: CalibrationProject, sid: CalibrationId): string {
       return f.retractionDistance !== undefined ? `Retraction: ${f.retractionDistance} mm${f.retractionSpeed ? ` @ ${f.retractionSpeed} mm/s` : ''}` : '';
     case 'max-volumetric-speed':
       return f.maxVolumetricSpeed !== undefined ? `Max volumetric speed: ${f.maxVolumetricSpeed} mm³/s` : '';
+    case 'shrinkage':
+      return f.shrinkagePercent !== undefined ? `Shrinkage: ${f.shrinkagePercent}%` : '';
     default: return '';
   }
 }

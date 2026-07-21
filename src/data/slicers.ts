@@ -111,6 +111,22 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           'Line/Pattern: values are printed next to the lines — read them directly rather than counting samples when possible.'
         ]
       },
+      'flow-verify': {
+        available: true, builtIn: true,
+        menuPath: 'Calibration → Flow rate → Pass 2',
+        steps: [
+          'Verify BOTH your calibrated flow ratio AND the new Pressure Advance value are saved in the filament profile — this re-check tests flow under the new PA.',
+          'Open Calibration → Flow rate and choose Pass 2 (the same fine plate as before: −9 to 0, 1% steps).',
+          'Slice and print.',
+          'Pick the smoothest block. If the 0 block wins, your flow ratio is confirmed; a neighbor winning means PA was masking a small flow error.'
+        ],
+        saveTo: {
+          path: 'Filament settings → Filament tab',
+          field: 'Flow ratio',
+          scope: 'filament',
+          note: 'Only update the value if a block other than 0 won; then save the user preset again.'
+        }
+      },
       retraction: {
         available: true, builtIn: true,
         menuPath: 'Calibration → Retraction test',
@@ -152,6 +168,27 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           note: 'Enter the PRODUCTION value (with safety margin applied), not the raw measured maximum.'
         },
         gotchas: ['This test measures a best-case scenario. The official guidance is to reduce the measured value by 10–20% for real prints — this app applies your configured margin automatically.']
+      },
+      shrinkage: {
+        available: true, builtIn: false,
+        menuPath: '(external test model — no calibration menu entry)',
+        steps: [
+          'Orca has no built-in shrinkage test — use one of the external tools from the models list (the free Printables shrinkage tool reads the percentage directly off a printed vernier scale).',
+          'Before slicing the tool, open Filament settings → Filament and make sure Shrinkage is 100% (no compensation) — the test measures what the compensation SHOULD be.',
+          'Print at 100% scale with your calibrated filament profile and normal process profile.',
+          'Let the parts cool fully to room temperature before measuring/reading.',
+          'Enter the reading(s) in the result step; the app combines X and Y into the value to save.'
+        ],
+        saveTo: {
+          path: 'Filament settings → Filament tab',
+          field: 'Shrinkage (labeled "Shrinkage (XY)" in newer Orca versions) — a percentage',
+          scope: 'filament',
+          note: 'Enter as a percentage (e.g. 99.4). Orca scales XY geometry up by 100/shrinkage% at slicing time. Save the user preset.'
+        },
+        gotchas: [
+          'Re-slice existing plates after changing shrinkage — compensation is applied at slicing time.',
+          'Newer Orca versions have a separate Z shrinkage field; the CaliLantern measures Z too if you want to fill it.'
+        ]
       },
       'final-verification': {
         available: true, builtIn: false,
@@ -271,6 +308,23 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           'Lidar-equipped X1/P1 can also run automatic Flow Dynamics on the machine.'
         ]
       },
+      'flow-verify': {
+        available: true, builtIn: true,
+        menuPath: 'Calibration tab → Flow Rate → Fine (Pass 2)',
+        steps: [
+          'Verify BOTH your calibrated flow ratio AND the new K factor (Flow Dynamics) are saved — this re-check tests flow under the new pressure timing.',
+          BAMBU_DEVELOPER_MODE_BEST_PATH,
+          'Open Calibration tab → Flow Rate → fine calibration (−9% to 0%, 1% steps) — the same plate as the earlier fine pass.',
+          'Slice, print, pick the smoothest block. The 0% block winning means your flow ratio is confirmed.'
+        ],
+        saveTo: {
+          path: 'Filament settings → Filament tab',
+          field: 'Flow ratio',
+          scope: 'filament',
+          note: 'Only update if a non-zero block won; then save the user preset.'
+        },
+        gotchas: [BAMBU_NON_BAMBU_FALLBACK]
+      },
       retraction: {
         available: true, builtIn: true,
         menuPath: 'Calibration tab → Retraction test (Developer mode)',
@@ -307,6 +361,24 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           note: 'Enter the production (margin-applied) value.'
         },
         gotchas: [BAMBU_NON_BAMBU_FALLBACK]
+      },
+      shrinkage: {
+        available: true, builtIn: false,
+        menuPath: '(external test model — no calibration menu entry)',
+        steps: [
+          'Bambu Studio has no built-in shrinkage test — use one of the external tools from the models list (the free Printables shrinkage tool reads the percentage directly off a printed vernier scale).',
+          'Before slicing, open Filament settings → Filament and set Shrinkage to 100% (no compensation) — the test measures what the compensation SHOULD be.',
+          'Print at 100% scale with your calibrated filament preset and normal process profile.',
+          'Let the parts cool fully before reading — enclosure materials (ABS/ASA) keep contracting for a while.',
+          'Enter the reading(s) in the result step.'
+        ],
+        saveTo: {
+          path: 'Filament settings → Filament tab',
+          field: 'Shrinkage — a percentage',
+          scope: 'filament',
+          note: 'Enter as a percentage (e.g. 99.4); Bambu Studio scales XY geometry up by 100/shrinkage%. Save as your user preset.'
+        },
+        gotchas: ['Re-slice existing plates after changing shrinkage — compensation is applied at slicing time.']
       },
       'final-verification': {
         available: true, builtIn: false,

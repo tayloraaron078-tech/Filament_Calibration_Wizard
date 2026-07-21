@@ -10,6 +10,15 @@ Backups now happen where the risk actually starts. Until now the only automatic 
 - **Pre-calibration backup prompt on every project.** Projects with remaining calibration steps show a callout offering a one-click snapshot of the project's slicer presets (falling back to all detected slicers) before any profile edits are suggested. The outcome — backed up or skipped — is recorded on the project and in its timeline. The browser build, which cannot write backups, shows manual backup guidance instead.
 - **First-run backup prompt.** On first use of the desktop app (once a slicer with user presets is detected), the dashboard offers to back up all detected slicers' preset libraries. Shown once; dismissible.
 - **Manual snapshots in Settings.** "Back up all slicer presets now" in Settings → Slicer profile backups snapshots every detected slicer on demand.
+- **New calibration step: Flow Ratio Re-check (after Pressure Advance).** Suggested by **confuzled**: PA changes how plastic is distributed through speed transitions, so a flow ratio judged before PA can be a fine step off. The new step re-runs the fine flow plate with PA active — the 0% block winning confirms the saved value; a neighbor winning catches the error cheaply. Sits between Pressure Advance and Retraction in the default order.
+- **New calibration step: Shrinkage / Dimensional Accuracy.** Also suggested by **confuzled**. Supports Vector 3D's free Printables shrinkage tool (read the percentage straight off its printed vernier scale), the paid CaliLantern MK2, or measuring any large object with calipers (the app computes measured ÷ nominal × 100 and averages X/Y, warning when the axes disagree enough to indicate a printer mechanical issue). The result lands in the filament profile's Shrinkage field, appears on reports/cards, and — new mapping — is patched into generated profiles as `filament_shrink` ("99.4%"-style percent string).
+- Projects created before this release gain both new steps automatically as not-started, inserted at their canonical position (existing progress, scores, and any custom step order are preserved).
+
+### Changed
+
+- **Drying advice no longer treats "fresh from a sealed bag" as dry** (thanks again, **confuzled**). PETG, TPU, PCTG and other hygroscopic materials often arrive wet from the factory even in sealed bags with desiccant. The pre-flight checklist now says dried-by-you is the requirement, and the PETG/PCTG/TPU material warnings call out factory-wet spools with drying temperatures.
+- Settings: the app-data backup card is now titled "App data backup (projects & printers)" and both backup cards cross-reference each other, so PerfectFit's own data export is no longer confusable with slicer preset backups.
+- The final verification checklist gained a "Dimensional accuracy" category whose ranked causes point at shrinkage and fine flow.
 
 ## 1.1.5 - 2026-07-20
 

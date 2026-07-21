@@ -202,6 +202,7 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
         const relevantModels = MODEL_MANIFEST.filter(mm =>
           (stepId === 'final-verification' && mm.test === 'Final verification') ||
           (stepId === 'retraction' && mm.test.startsWith('Retraction')) ||
+          (stepId === 'shrinkage' && mm.test.startsWith('Shrinkage')) ||
           (stepId === 'max-volumetric-speed' && mm.test.startsWith('Max flow')));
         if (relevantModels.length) {
           card.append(h('details', { class: 'why' },

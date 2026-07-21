@@ -343,11 +343,11 @@ export function cloneAndPatch(args: {
   }
 
   // Keys that may not hold "nil" (the slicer requires a concrete value).
-  const NO_NIL = new Set(['nozzle_temperature', 'nozzle_temperature_initial_layer', 'filament_flow_ratio', 'filament_max_volumetric_speed', 'pressure_advance']);
+  const NO_NIL = new Set(['nozzle_temperature', 'nozzle_temperature_initial_layer', 'filament_flow_ratio', 'filament_max_volumetric_speed', 'pressure_advance', 'filament_shrink']);
 
   for (const patch of patches) {
     const key = patch.presetKey;
-    const after = formatPresetNumber(patch.value);
+    const after = formatPresetNumber(patch.value) + (patch.valueSuffix ?? '');
     const existing = data[key];
     let arr: string[];
     if (Array.isArray(existing) && existing.every(x => typeof x === 'string') && existing.length > 0) {

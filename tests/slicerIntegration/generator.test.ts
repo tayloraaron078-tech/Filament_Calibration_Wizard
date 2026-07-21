@@ -34,14 +34,16 @@ function makeProject(overrides: Partial<CalibrationProject['finals']> = {}): Cal
     },
     printerProfileId: 'printer-1', nozzleType: 'brass',
     slicer: { slicer: 'orca', version: '2.4.x' }, notes: '', mode: 'expert',
-    stepOrder: ['temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance', 'retraction', 'max-volumetric-speed', 'final-verification'],
+    stepOrder: ['temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance', 'flow-verify', 'retraction', 'max-volumetric-speed', 'shrinkage', 'final-verification'],
     steps: {
       'temperature': { ...completed },
       'flow-pass1': { ...completed },
       'flow-pass2': { ...completed },
       'pressure-advance': { ...completed },
+      'flow-verify': { ...completed },
       'retraction': { ...completed },
       'max-volumetric-speed': { ...completed },
+      'shrinkage': { ...completed },
       'final-verification': { ...completed }
     },
     timeline: [], archived: false, finals
@@ -67,6 +69,35 @@ describe('buildPatchesFromProject', () => {
   it('adds enable_pressure_advance as a companion of pressure_advance', () => {
     const pa = buildPatchesFromProject(makeProject()).find(p => p.presetKey === 'pressure_advance');
     expect(pa?.companions).toEqual([{ presetKey: 'enable_pressure_advance', value: '1' }]);
+  });
+
+  it('patches shrinkage only when calibrated, as a percent string', () => {
+    expect(buildPatchesFromProject(makeProject()).map(p => p.presetKey)).not.toContain('filament_shrink');
+    const withShrink = buildPatchesFromProject(makeProject({ shrinkagePercent: 99.4 }))
+      .find(p => p.presetKey === 'filament_shrink');
+    expect(withShrink?.value).toBe(99.4);
+    expect(withShrink?.valueSuffix).toBe('%');
+  });
+
+  it('flow ratio is offered when only the post-PA re-check completed it', () => {
+    const project = makeProject();
+    project.steps['flow-pass1'].status = 'skipped';
+    project.steps['flow-pass2'].status = 'skipped';
+    const patches = buildPatchesFromProject(project);
+    expect(patches.map(p => p.presetKey)).toContain('filament_flow_ratio');
+  });
+
+  it('serializes filament_shrink with the % suffix into the generated preset', () => {
+    const { file, slicer } = USER_FIXTURES[0];
+    const parsed = parseFixture(file, slicer);
+    const project = makeProject({ shrinkagePercent: 99.4 });
+    const generated = generateProfile({
+      slicerId: slicer, baseProfile: parsed.profile, newName: 'PF Shrink Test',
+      patches: buildPatchesFromProject(project),
+      targetExtruderIndex: 0, applyToAllExtruders: false, project
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    expect((reparsed.filament_shrink as string[])[0]).toBe('99.4%');
   });
 });
 

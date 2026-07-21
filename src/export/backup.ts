@@ -1,5 +1,5 @@
 import type { BackupFile, CalibrationProject, PrinterProfile, StoredPhoto } from '../types';
-import { SCHEMA_VERSION, listPrinters, listProjects, loadSettings, saveProject, savePrinter, uid } from '../storage/store';
+import { SCHEMA_VERSION, ensureProjectSteps, listPrinters, listProjects, loadSettings, saveProject, savePrinter, uid } from '../storage/store';
 import { idb } from '../storage/db';
 
 /** Serialize one project (with its printer profile embedded) for sharing. */
@@ -110,13 +110,18 @@ export async function importBackup(json: string): Promise<ImportResult> {
   };
 }
 
-/** Migrate older schema versions forward. v2 is current. */
+/** Migrate older schema versions forward. v3 is current. */
 export function migrate(file: BackupFile): BackupFile {
   const v = file.schemaVersion ?? 1;
   let out = file;
   if (v < 2) {
     // v1 → v2: generatedProfiles added; absent means none.
     out = { ...out, schemaVersion: 2 };
+  }
+  if ((out.schemaVersion ?? 1) < 3) {
+    // v2 → v3: flow-verify + shrinkage steps added; ensureProjectSteps below
+    // inserts them as not-started.
+    out = { ...out, schemaVersion: 3 };
   }
   // Defensive normalization regardless of version:
   for (const p of out.projects ?? []) {
@@ -129,6 +134,7 @@ export function migrate(file: BackupFile): BackupFile {
       const st = (p.steps as Record<string, { history?: unknown[] }>)[key];
       if (st && !Array.isArray(st.history)) st.history = [];
     }
+    ensureProjectSteps(p);
   }
   return out;
 }

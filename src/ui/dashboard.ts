@@ -78,6 +78,7 @@ function projectCard(p: CalibrationProject, printers: Map<string, PrinterProfile
   if (f.pressureAdvance !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `🏎 PA ${f.pressureAdvance}`));
   if (f.retractionDistance !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `🧵 ${f.retractionDistance}mm`));
   if (f.maxVolumetricSpeed !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `⚡ ${f.maxVolumetricSpeed}mm³/s`));
+  if (f.shrinkagePercent !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `📐 ${f.shrinkagePercent}%`));
 
   return h('div', { class: 'card proj-card' },
     h('div', { style: 'display:flex;justify-content:space-between;gap:.5rem;align-items:baseline' },

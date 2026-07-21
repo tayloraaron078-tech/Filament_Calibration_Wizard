@@ -22,11 +22,11 @@ function makeProject(finalsOverrides: Partial<CalibrationProject['finals']> = {}
     filament: { manufacturer: 'Elegoo', productLine: '', material: 'PLA', color: 'Grey', diameter: 1.75, startingProfile: '' },
     printerProfileId: 'pr', nozzleType: 'brass', slicer: { slicer: 'orca', version: '2.4.x' },
     notes: '', mode: 'expert',
-    stepOrder: ['temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance', 'retraction', 'max-volumetric-speed', 'final-verification'],
+    stepOrder: ['temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance', 'flow-verify', 'retraction', 'max-volumetric-speed', 'shrinkage', 'final-verification'],
     steps: {
       'temperature': { ...completed }, 'flow-pass1': { ...completed }, 'flow-pass2': { ...completed },
-      'pressure-advance': { ...completed }, 'retraction': { ...completed },
-      'max-volumetric-speed': { ...completed }, 'final-verification': { ...completed }
+      'pressure-advance': { ...completed }, 'flow-verify': { ...completed }, 'retraction': { ...completed },
+      'max-volumetric-speed': { ...completed }, 'shrinkage': { ...completed }, 'final-verification': { ...completed }
     },
     timeline: [], archived: false,
     finals: { nozzleTemp: 215, flowRatio: 1.02, pressureAdvance: 0.04, retractionDistance: 0.9, maxVolumetricSpeed: 18, ...finalsOverrides }

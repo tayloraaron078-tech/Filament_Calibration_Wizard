@@ -5,6 +5,7 @@ import type {
 import {
   flowYolo, flowPercent, paTower, paFromSample, retractionFromHeight,
   mvsFromHeight, mvsProduction, volumetricFlow, maxSpeedForFlow, generateRange, roundTo,
+  shrinkageFromMeasurement, shrinkageCombined,
   type CalcResult
 } from '../logic/formulas';
 import {
@@ -196,20 +197,20 @@ const temperatureController: TestController = {
 // Flow pass 1 & 2
 // ---------------------------------------------------------------------------
 
-function flowController(pass: 1 | 2): TestController {
+function flowController(pass: 1 | 2 | 'verify'): TestController {
   return {
     settingsForm(ctx, prior) {
-      const priorRatio = pass === 2
-        ? (ctx.project.finals.flowRatio ?? ctx.material.startingFlowRatio)
-        : (ctx.project.finals.flowRatio ?? ctx.material.startingFlowRatio);
+      const priorRatio = ctx.project.finals.flowRatio ?? ctx.material.startingFlowRatio;
       const oldRatio = numberInput({ value: prior?.oldRatio ?? priorRatio, step: 0.001 });
       const el = h('div', {},
-        field(`Current flow ratio in the slicer profile ${pass === 2 ? '(after Pass 1 was saved)' : ''} *`, oldRatio,
+        field(`Current flow ratio in the slicer profile ${pass === 2 ? '(after Pass 1 was saved)' : pass === 'verify' ? '(your calibrated value)' : ''} *`, oldRatio,
           'Find it under Filament settings → Filament → Flow ratio. A decimal like 0.98 — if the field shows something like 98, that\'s a percentage from another slicer; enter 0.98.'),
         h('p', { class: 'field-help' },
           pass === 1
             ? 'The printed blocks carry their modifiers; you\'ll pick one after printing.'
-            : 'Pass 2 blocks run −9% to 0% in 1% steps, relative to the SAVED Pass 1 value.')
+            : pass === 'verify'
+              ? 'The re-check prints the same fine blocks (−9% to 0%, 1% steps) relative to your SAVED value — with Pressure Advance now active. If the 0% block wins, your flow ratio is confirmed.'
+              : 'Pass 2 blocks run −9% to 0% in 1% steps, relative to the SAVED Pass 1 value.')
       );
       return {
         el,
@@ -221,7 +222,7 @@ function flowController(pass: 1 | 2): TestController {
     },
 
     resultForm(ctx, settings, prior) {
-      const mods = suggestFlowMethodDefaults(pass === 2 ? 'pass2' : ctx.method).modifiers;
+      const mods = suggestFlowMethodDefaults(pass === 1 ? ctx.method : 'pass2').modifiers;
       let selected: number | null = (prior?.modifier as number) ?? null;
       const isYolo = pass === 1 && ctx.method.startsWith('yolo');
       const chips = h('div', { class: 'sample-grid', role: 'group', 'aria-label': 'Printed block modifiers' });
@@ -267,12 +268,18 @@ function flowController(pass: 1 | 2): TestController {
       const isYolo = pass === 1 && ctx.method.startsWith('yolo');
       const calc = isYolo ? flowYolo(old, mod) : flowPercent(old, mod);
       const finalsPatch = { flowRatio: calc.rounded };
+      const warnings = [...calc.warnings];
+      if (pass === 'verify' && mod === 0) {
+        warnings.push('The 0% block won — your saved flow ratio is confirmed under the new Pressure Advance. Nothing to change in the slicer.');
+      } else if (pass === 'verify' && mod <= -3) {
+        warnings.push(`The re-check moved your flow by ${mod}% — more than PA normally accounts for. Check that temperature, plate, and cooling matched the original flow test.`);
+      }
       return {
         calcs: [calc],
         computed: { newFlowRatio: calc.rounded },
         finalsPatch,
         enterInSlicer: [{ label: 'Flow ratio (decimal — not a percentage)', value: String(calc.rounded) }],
-        warnings: calc.warnings
+        warnings
       };
     }
   };
@@ -728,6 +735,111 @@ const mvsController: TestController = {
 };
 
 // ---------------------------------------------------------------------------
+// Shrinkage / dimensional accuracy
+// ---------------------------------------------------------------------------
+
+const shrinkageController: TestController = {
+  settingsForm(ctx, prior) {
+    const directReading = ctx.method !== 'measured-object';
+    if (directReading) {
+      const el = h('div', {},
+        h('p', {}, ctx.method === 'calilantern'
+          ? 'Print the CaliLantern with your calibrated filament profile and your normal process profile, at 100% scale with any slicer shrinkage compensation set to 100% (off) — the tool measures what the compensation should BE, so it must not already be applied.'
+          : 'Print the shrinkage tool with your calibrated filament profile at 100% scale, with the slicer\'s shrinkage compensation at 100% (off) — the tool measures what the compensation should BE, so it must not already be applied.'),
+        h('p', { class: 'field-help' }, 'Let the parts cool fully before reading the scale. You\'ll enter the percentage(s) the tool shows in the result step — no calipers or math needed.')
+      );
+      return { el, collect: () => ({ data: { entry: 'direct' }, issues: [] }) };
+    }
+    const nomX = numberInput({ value: prior?.nominalX ?? 100, step: 1 });
+    const nomY = numberInput({ value: prior?.nominalY ?? 100, step: 1 });
+    const el = h('div', {},
+      h('p', {}, 'Print a large, simple object of known size with your calibrated profile — shrinkage compensation set to 100% (off) — and measure it after full cooldown.'),
+      h('div', { class: 'field-row' },
+        field('Nominal X size (mm)', nomX, 'The design dimension along X. Bigger is better: ≥100 mm makes 0.5% shrinkage clearly measurable.'),
+        field('Nominal Y size (mm)', nomY, 'The design dimension along Y.')
+      )
+    );
+    return {
+      el,
+      collect() {
+        const issues = [
+          ...validateNumber(nomX.value, { label: 'Nominal X', min: 10, max: 500 }),
+          ...validateNumber(nomY.value, { label: 'Nominal Y', min: 10, max: 500 })
+        ];
+        if (num(nomX.value) < 60 || num(nomY.value) < 60) {
+          issues.push({ level: 'warning', message: 'Below ~60 mm, shrinkage differences approach caliper measurement noise — a larger object gives a much more trustworthy percentage.' });
+        }
+        return { data: { entry: 'measured', nominalX: num(nomX.value), nominalY: num(nomY.value) }, issues };
+      }
+    };
+  },
+
+  resultForm(ctx, settings, prior) {
+    const direct = settings.entry !== 'measured';
+    const xIn = numberInput({ value: prior?.x ?? '', step: 0.01, placeholder: direct ? 'e.g. 99.4' : 'e.g. 99.42' });
+    const yIn = numberInput({ value: prior?.y ?? '', step: 0.01, placeholder: 'optional — leave empty to reuse X' });
+    const el = h('div', {},
+      direct
+        ? h('p', {}, 'Read the shrinkage percentage(s) off the tool\'s scale (after full cooldown).')
+        : h('p', {}, `Measure the printed object with calipers — above the first layers, not across the base flare. Nominal sizes: X ${settings.nominalX} mm, Y ${settings.nominalY} mm.`),
+      h('div', { class: 'field-row' },
+        field(direct ? 'Shrinkage X (%)' : 'Measured X (mm)', xIn),
+        field(direct ? 'Shrinkage Y (%)' : 'Measured Y (mm)', yIn, 'If your tool/measurement only gives one number, leave Y empty.')
+      ),
+      ctx.coach ? h('details', { class: 'why' },
+        h('summary', {}, '🤔 My X and Y disagree'),
+        h('div', { class: 'why-body' },
+          h('p', {}, 'Filament shrinks the same in every direction — it has no idea which way X is. A real X/Y difference means the PRINTER is drawing rectangles that aren\'t quite square or true to size: belt tension, frame squareness, or skew. Small differences (≤0.2%) are normal; beyond ~0.5%, fix the mechanics before compensating in the filament profile.')
+        )) : null
+    );
+    return {
+      el,
+      collect() {
+        const issues: ValidationIssue[] = [];
+        if (direct) {
+          issues.push(...validateNumber(xIn.value, { label: 'Shrinkage X', min: 90, max: 102 }));
+          if (yIn.value !== '') issues.push(...validateNumber(yIn.value, { label: 'Shrinkage Y', min: 90, max: 102 }));
+        } else {
+          issues.push(...validateNumber(xIn.value, { label: 'Measured X', min: 1, max: 600 }));
+          if (yIn.value !== '') issues.push(...validateNumber(yIn.value, { label: 'Measured Y', min: 1, max: 600 }));
+        }
+        return { data: { x: num(xIn.value), y: yIn.value === '' ? '' : num(yIn.value) }, issues };
+      }
+    };
+  },
+
+  compute(ctx, settings, result) {
+    const calcs: CalcResult[] = [];
+    let xPct: number, yPct: number;
+    if (settings.entry === 'measured') {
+      const cx = shrinkageFromMeasurement(num(settings.nominalX), num(result.x));
+      calcs.push(cx);
+      xPct = cx.rounded;
+      if (result.y !== '' && result.y !== undefined) {
+        const cy = shrinkageFromMeasurement(num(settings.nominalY), num(result.y));
+        calcs.push(cy);
+        yPct = cy.rounded;
+      } else {
+        yPct = xPct;
+      }
+    } else {
+      xPct = roundTo(num(result.x), 2);
+      yPct = result.y !== '' && result.y !== undefined ? roundTo(num(result.y), 2) : xPct;
+    }
+    const combined = shrinkageCombined(xPct, yPct);
+    calcs.push(combined);
+    const warnings = calcs.flatMap(c => c.warnings);
+    return {
+      calcs,
+      computed: { shrinkageX: xPct, shrinkageY: yPct, shrinkagePercent: combined.rounded },
+      finalsPatch: { shrinkagePercent: combined.rounded },
+      enterInSlicer: [{ label: 'Shrinkage (XY) — a percentage', value: `${combined.rounded}%` }],
+      warnings
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Final verification
 // ---------------------------------------------------------------------------
 
@@ -822,7 +934,9 @@ export const CONTROLLERS: Record<CalibrationId, TestController> = {
   'flow-pass1': flowController(1),
   'flow-pass2': flowController(2),
   'pressure-advance': paController,
+  'flow-verify': flowController('verify'),
   retraction: retractionController,
   'max-volumetric-speed': mvsController,
+  shrinkage: shrinkageController,
   'final-verification': verificationController
 };
