@@ -128,6 +128,25 @@ pub fn scan_slicer_profiles(
             if filament_dir.is_dir() {
                 scan_dir(&filament_dir, "system", None, Some(&vendor), false, &mut out);
             }
+            // Vendor manifest (system/{Vendor}.json): carries the preset
+            // library version that user presets must be stamped with — the
+            // slicer refuses/hides user presets without a `version`, and the
+            // value comes from here, not from any preset in the library.
+            let manifest = system_root.join(format!("{vendor}.json"));
+            if manifest.is_file() {
+                if let Some(json) = read_preset_file(&manifest) {
+                    out.push(RawProfileFile {
+                        file_name: format!("{vendor}.json"),
+                        path: manifest.to_string_lossy().to_string(),
+                        dir_kind: "vendor_manifest".to_string(),
+                        account_id: None,
+                        vendor: Some(vendor.clone()),
+                        json,
+                        info: None,
+                        writable: false,
+                    });
+                }
+            }
         }
     }
     Ok(out)

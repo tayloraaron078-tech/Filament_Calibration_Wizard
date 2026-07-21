@@ -105,6 +105,12 @@ export async function scanProfiles(
   return { profiles, parsed, parseFailures };
 }
 
+/** Zero-strip a vendor library version the way the slicer stamps presets:
+ * "02.07.00.08" → "2.7.0.8". Non-numeric components pass through unchanged. */
+export function normalizeLibraryVersion(v: string): string {
+  return v.split('.').map(part => (/^\d+$/.test(part) ? String(parseInt(part, 10)) : part)).join('.');
+}
+
 function firstStr(v: unknown): string | null {
   if (typeof v === 'string' && v) return v;
   if (Array.isArray(v) && typeof v[0] === 'string' && v[0]) return v[0];
@@ -133,16 +139,40 @@ function strArr(v: unknown): string[] {
  */
 export function resolveInheritedMetadata(
   profiles: DetectedFilamentProfile[],
-  rawFiles: { dir_kind: string; json: string }[]
+  rawFiles: { dir_kind: string; json: string; vendor?: string | null }[]
 ): void {
   const systemByName = new Map<string, Record<string, unknown>>();
+  // Vendor library versions from system/{Vendor}.json manifests. User presets
+  // must be stamped with this version (zero-stripped: "02.07.00.08" →
+  // "2.7.0.8"); no preset inside the library carries it.
+  const vendorVersions = new Map<string, string>();
   for (const f of rawFiles) {
+    if (f.dir_kind === 'vendor_manifest' && f.vendor) {
+      try {
+        const d = JSON.parse(f.json) as Record<string, unknown>;
+        if (typeof d.version === 'string' && d.version) {
+          vendorVersions.set(f.vendor, normalizeLibraryVersion(d.version));
+        }
+      } catch { /* ignore unparsable manifests */ }
+      continue;
+    }
     if (f.dir_kind !== 'system') continue;
     try {
       const d = JSON.parse(f.json) as Record<string, unknown>;
       if (d && typeof d.name === 'string' && d.name) systemByName.set(d.name, d);
     } catch { /* unparsable files are already reported via parseFailures */ }
   }
+
+  for (const p of profiles) {
+    if (p.profileVersion || p.sourceType !== 'system' || !p.filePath) continue;
+    for (const [vendor, ver] of vendorVersions) {
+      if (p.filePath.includes(`/system/${vendor}/`) || p.filePath.includes(`\\system\\${vendor}\\`)) {
+        p.profileVersion = ver;
+        break;
+      }
+    }
+  }
+
   if (systemByName.size === 0) return;
 
   for (const p of profiles) {

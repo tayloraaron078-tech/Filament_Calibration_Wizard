@@ -271,6 +271,11 @@ export function freshFilamentId(seed: string): string {
   return 'P' + h.toString(16).padStart(8, '0').slice(0, 7);
 }
 
+/** Slot legend for Bambu machines, in slot order. Observed on a real install:
+ * H2S/P1S presets use [Standard, High Flow]; H2D TPU presets add a third
+ * TPU High Flow slot; X1-era single-slot presets use [Standard]. */
+const BAMBU_EXTRUDER_VARIANTS = ['Direct Drive Standard', 'Direct Drive High Flow', 'Direct Drive TPU High Flow'];
+
 export function cloneAndPatch(args: {
   base: ParsedFilamentProfile;
   newName: string;
@@ -313,11 +318,28 @@ export function cloneAndPatch(args: {
   if (base.profile.sourceType === 'system' && base.profile.name) {
     data.inherits = base.profile.name;
   }
-  // Bambu-created user presets always carry a schema `version`; system leaves
-  // inherit theirs from the abstract chain, so fill it from the resolved base
-  // when the clone would otherwise lack one. Never invented beyond that.
+  // Bambu-created user presets always carry a `version` — the vendor library
+  // version from system/{Vendor}.json (resolved by the scanner); no preset in
+  // the library declares it. Fill it when the clone would otherwise lack one.
   if (typeof data.version !== 'string' && base.profile.profileVersion) {
     data.version = base.profile.profileVersion;
+  }
+  // Bambu Studio user presets never carry system-preset plumbing: `type`,
+  // `instantiation`, and `include` appear in NO preset Bambu itself writes
+  // into an account folder (verified across a real account's 70+ presets),
+  // and `include` references template files that do not resolve from user
+  // dirs. Everything they provided still flows through `inherits` → the
+  // concrete system leaf. Working presets also all declare
+  // `filament_extruder_variant` — the legend mapping each per-slot array
+  // position to hardware; variant-aware Bambu Studio (2.7+) does not show a
+  // user preset without it.
+  if (base.profile.slicerId === 'bambu') {
+    delete data.type;
+    delete data.instantiation;
+    delete data.include;
+    if (!Array.isArray(data.filament_extruder_variant)) {
+      data.filament_extruder_variant = BAMBU_EXTRUDER_VARIANTS.slice(0, Math.max(1, extruders));
+    }
   }
 
   // Keys that may not hold "nil" (the slicer requires a concrete value).

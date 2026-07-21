@@ -2,7 +2,7 @@
 // Bambu system leaves declare compatible_printers but inherit filament_type /
 // filament_vendor from abstract parents; user deltas inherit compatible_printers.
 import { describe, expect, it } from 'vitest';
-import { resolveInheritedMetadata } from '../../src/slicerIntegration/scanner';
+import { normalizeLibraryVersion, resolveInheritedMetadata } from '../../src/slicerIntegration/scanner';
 import type { DetectedFilamentProfile } from '../../src/slicerIntegration/types';
 
 function profile(overrides: Partial<DetectedFilamentProfile>): DetectedFilamentProfile {
@@ -62,6 +62,26 @@ describe('resolveInheritedMetadata', () => {
     });
     resolveInheritedMetadata([leaf], systemFiles);
     expect(leaf.profileVersion).toBe('2.3.0.2');
+  });
+
+  it('falls back to the vendor manifest version (zero-stripped) when the chain has none', () => {
+    // Real BBL libraries carry NO version in any preset — it lives in
+    // system/BBL.json as e.g. "02.07.00.08", and Bambu stamps user presets
+    // with the zero-stripped form "2.7.0.8".
+    const leaf = profile({
+      name: 'Generic ASA @BBL H2S 0.4 nozzle', parentProfileName: 'Nonexistent Parent',
+      filePath: 'C:\\Users\\x\\AppData\\Roaming\\BambuStudio\\system\\BBL\\filament\\Generic ASA @BBL H2S 0.4 nozzle.json'
+    });
+    resolveInheritedMetadata([leaf], [
+      ...systemFiles,
+      { dir_kind: 'vendor_manifest', vendor: 'BBL', json: JSON.stringify({ name: 'Bambulab', version: '02.07.00.08' }) }
+    ]);
+    expect(leaf.profileVersion).toBe('2.7.0.8');
+  });
+
+  it('normalizeLibraryVersion strips leading zeros per component', () => {
+    expect(normalizeLibraryVersion('02.07.00.08')).toBe('2.7.0.8');
+    expect(normalizeLibraryVersion('1.10.0.14')).toBe('1.10.0.14');
   });
 
   it('fills compatible_printers for a user delta from its system parent', () => {

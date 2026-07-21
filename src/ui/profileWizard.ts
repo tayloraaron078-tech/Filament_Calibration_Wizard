@@ -490,11 +490,16 @@ function renderConfigureStage(
     // two slots are Standard vs High Flow — NOT two nozzles. Only the machine
     // preset (which we don't scan) can say which meaning applies, so label
     // both honestly and let the user pick the slot matching their hardware.
+    const rawVariants = (base.profile.rawProfile as Record<string, unknown>).filament_extruder_variant;
+    const variantNames = Array.isArray(rawVariants)
+      ? rawVariants.filter((x): x is string => typeof x === 'string') : [];
     const twoSlots = base.extruderCount === 2;
-    const slotLabel = (i: number) => twoSlots
-      ? (i === 0 ? 'Slot 1 — nozzle 1, or the STANDARD hotend on single-nozzle printers'
-                 : 'Slot 2 — nozzle 2, or the HIGH FLOW hotend on single-nozzle printers')
-      : `Value slot ${i + 1}`;
+    const slotLabel = (i: number) => variantNames[i]
+      ? `Slot ${i + 1} — ${variantNames[i]}`
+      : twoSlots
+        ? (i === 0 ? 'Slot 1 — nozzle 1, or the STANDARD hotend on single-nozzle printers'
+                   : 'Slot 2 — nozzle 2, or the HIGH FLOW hotend on single-nozzle printers')
+        : `Value slot ${i + 1}`;
     const toolSel = h('select', {},
       Array.from({ length: base.extruderCount }, (_, i) =>
         h('option', { value: String(i), selected: st.targetExtruder === i }, slotLabel(i)))) as HTMLSelectElement;

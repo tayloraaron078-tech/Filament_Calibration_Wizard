@@ -15,8 +15,13 @@ export interface JsonDiffEntry {
 
 /** Identity keys expected to differ between base and clone. filament_id is
  * always regenerated; inherits/version are rewritten when cloning a system
- * preset (validation enforces the exact expected values). */
-const IDENTITY_KEYS = new Set(['name', 'filament_settings_id', 'from', 'setting_id', 'user_id', 'filament_id', 'inherits', 'version']);
+ * preset; type/instantiation/include are stripped and the
+ * filament_extruder_variant legend added for Bambu (validation enforces the
+ * exact expected values). */
+const IDENTITY_KEYS = new Set([
+  'name', 'filament_settings_id', 'from', 'setting_id', 'user_id', 'filament_id',
+  'inherits', 'version', 'type', 'instantiation', 'include', 'filament_extruder_variant'
+]);
 
 export function fullJsonDiff(
   base: Record<string, unknown>,

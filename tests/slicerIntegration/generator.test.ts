@@ -303,6 +303,36 @@ describe('system-leaf clones carry Bambu-native identity (H2S visibility bug)', 
     expect(reparsed.version).toBe('2.3.0.2');
   });
 
+  it('strips Bambu system-preset plumbing and adds the slot legend', () => {
+    // Every preset Bambu Studio itself writes into an account folder lacks
+    // type/instantiation/include and declares filament_extruder_variant;
+    // presets that deviate are not shown (verified on a real 2.7.x account).
+    const parsed = parseSystemLeaf();
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF H2S ASA',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    expect(reparsed.type).toBeUndefined();
+    expect(reparsed.instantiation).toBeUndefined();
+    expect(reparsed.include).toBeUndefined();
+    expect(reparsed.filament_extruder_variant).toEqual(['Direct Drive Standard', 'Direct Drive High Flow']);
+  });
+
+  it('does not strip type from non-Bambu (Orca-family) clones', () => {
+    const parsed = parseFixture('orca-user-delta-pla.json', 'orca');
+    const original = parsed.profile.rawProfile as Record<string, unknown>;
+    const generated = generateProfile({
+      slicerId: 'orca', baseProfile: parsed.profile, newName: 'PF Orca Clone',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, project: makeProject()
+    }, parsed);
+    const reparsed = JSON.parse(generated.serialized) as Record<string, unknown>;
+    if ('type' in original) expect(reparsed.type).toEqual(original.type);
+    expect(reparsed.filament_extruder_variant).toEqual(original.filament_extruder_variant);
+  });
+
   it('keeps inherits untouched when cloning a user preset', () => {
     const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
     const original = parsed.profile.rawProfile as Record<string, unknown>;

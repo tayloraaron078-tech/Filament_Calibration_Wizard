@@ -46,8 +46,13 @@ export function validateGeneratedProfile(
 
   if (reparsed) {
     // Round-trip: every base key must exist in the output (unknown fields
-    // survive), except identity keys we intentionally remove.
+    // survive), except identity keys we intentionally remove. For Bambu,
+    // system-preset plumbing is stripped too (no preset Bambu itself writes
+    // into a user folder carries these, and `include` breaks user-dir loads).
     const removedOk = new Set(['setting_id', 'user_id']);
+    if (generated.slicerId === 'bambu') {
+      for (const k of ['type', 'instantiation', 'include']) removedOk.add(k);
+    }
     for (const key of Object.keys(baseRaw)) {
       if (!(key in reparsed) && !removedOk.has(key)) {
         errors.push(err('FIELD_LOST', `Field lost in generation: ${key}`));
@@ -85,6 +90,9 @@ export function validateGeneratedProfile(
       errors.push(err('FILAMENT_ID_MISSING', 'Generated profile must carry its own filament_id.'));
     } else if (typeof baseRaw.filament_id === 'string' && baseRaw.filament_id === reparsed.filament_id) {
       errors.push(err('FILAMENT_ID_COLLISION', 'filament_id must differ from the base profile (the slicer hides id collisions).'));
+    }
+    if (generated.slicerId === 'bambu' && !Array.isArray(reparsed.filament_extruder_variant)) {
+      errors.push(err('EXTRUDER_VARIANT_MISSING', 'Bambu presets must declare filament_extruder_variant (the slicer does not show presets without it).'));
     }
 
     // Array shape: no per-extruder array may change length vs the base.

@@ -6,10 +6,13 @@ Fixes generated Bambu profiles still not appearing in the slicer when cloned fro
 
 ### Fixed
 
-- **Profiles cloned from stock presets now carry Bambu-native identity, so Bambu Studio actually shows them.** Three gaps, all invisible in 1.1.4:
-  - The fresh `filament_id` introduced in 1.1.3 was only assigned when the base already declared one — but stock leaves inherit their id from the abstract `@base` parent, so clones of stock presets shipped with **no** `filament_id` and the signed-in slicer never adopted them. The id is now always freshly assigned (and validation blocks a missing or colliding id).
-  - Clones kept the stock leaf's own `inherits` (an abstract `@base` preset). Bambu Studio saves user presets inheriting the **concrete** system preset by name; clones of system presets now do the same, and the schema `version` is filled from the resolved inheritance chain.
-  - The `.info` sidecar always shipped an empty `user_id`; presets Bambu Studio writes into an account folder carry the account id. The installer now stamps the target account's id at install time.
+- **Profiles cloned from stock presets now match what Bambu Studio itself writes, so it actually shows them.** Diagnosed by field-presence survey across all 70+ presets Bambu Studio 2.7.x had written into the real account folder vs the two invisible PerfectFit ones:
+  - Clones carried stock-preset plumbing no Bambu-written user preset has: `type`, `instantiation`, and `include` — and `include` references template files that don't resolve from user folders. All three are now stripped (their contents flow through `inherits` instead).
+  - Every visible preset declares `filament_extruder_variant` (the legend mapping per-slot values to hardware — e.g. `["Direct Drive Standard","Direct Drive High Flow"]` on an H2S); clones had none. Now added, sized to the preset's slots.
+  - Every visible preset carries a `version` — the vendor library version from `system/BBL.json` (zero-stripped, e.g. `02.07.00.08` → `2.7.0.8`), which **no preset inside the library declares**. The native scan now reads vendor manifests and clones are stamped with it.
+  - Clones kept the stock leaf's own `inherits` (an abstract `@base` preset Bambu never exposes). Bambu saves user presets inheriting the **concrete** system preset by name; clones now do the same.
+  - The fresh `filament_id` introduced in 1.1.3 was only assigned when the base already declared one — stock leaves inherit theirs, so clones of stock presets had none. Now always assigned (validation blocks a missing or colliding id).
+  - The `.info` sidecar always shipped an empty `user_id`; presets in an account folder carry the account id. The installer now stamps the target account's id at install time.
 
 ### Changed
 

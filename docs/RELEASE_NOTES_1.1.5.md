@@ -11,25 +11,31 @@ into the same account folder (H2S).
 
 ### Profiles cloned from stock presets now appear in Bambu Studio
 
-A preset PerfectFit installed differed from a Bambu-written user preset in
-three ways, each traced to the same root pattern — metadata that stock leaves
-inherit rather than declare:
+Diagnosed by surveying every preset Bambu Studio 2.7.x itself had written
+into a real signed-in account folder (70+) against the invisible
+PerfectFit-installed ones, and matching the invariants exactly:
 
-1. **No `filament_id`.** The 1.1.3 fix assigned a fresh id only when the base
-   already declared one. Stock leaves (e.g. `Generic ASA @BBL H2S 0.4 nozzle`)
-   inherit their id from the abstract `@base` parent, so clones of stock
-   presets shipped with no id at all — and the signed-in slicer, which keys
-   filaments by `filament_id`, never adopted them. The id is now always
-   freshly assigned, and validation blocks a missing or colliding id.
-2. **Abstract `inherits`.** Clones kept the stock leaf's own `inherits`
-   (`Generic ASA @base` — an abstract preset Bambu never exposes). Bambu
-   Studio saves user presets inheriting the concrete system preset by name;
-   clones now do the same, and the schema `version` is filled from the
-   resolved inheritance chain.
-3. **Empty `user_id` in the `.info` sidecar.** Presets Bambu Studio writes
-   into an account folder carry the owning account id; PerfectFit always
-   wrote an empty one. The installer now stamps the target account's id at
-   install time (local, non-account installs stay empty).
+1. **Stock-preset plumbing removed.** Clones carried `type`,
+   `instantiation`, and `include` — keys no Bambu-written user preset has.
+   `include` is the worst: it references template files that don't resolve
+   from a user folder. All three are stripped; everything they provided
+   still flows through `inherits`.
+2. **`filament_extruder_variant` added.** Every visible preset declares this
+   legend mapping per-slot values to hardware (on an H2S:
+   `["Direct Drive Standard","Direct Drive High Flow"]`). Variant-aware
+   Bambu Studio does not show user presets without it.
+3. **`version` stamped from the vendor manifest.** Every visible preset
+   carries the vendor library version from `system/BBL.json` (zero-stripped:
+   `02.07.00.08` → `2.7.0.8`) — a value no preset inside the library
+   declares. The native scan now reads vendor manifests to supply it.
+4. **Concrete `inherits`.** Clones kept the stock leaf's own `inherits`
+   (an abstract `@base` preset). Bambu saves user presets inheriting the
+   concrete system preset by name; clones now do the same.
+5. **Fresh `filament_id`, always.** The 1.1.3 fix only fired when the base
+   declared an id — stock leaves inherit theirs, so clones of stock presets
+   had none. Now always assigned; validation blocks missing/colliding ids.
+6. **Account `user_id` in the `.info` sidecar**, stamped at install time
+   (local, non-account installs stay empty), matching Bambu-written presets.
 
 If a `PerfectFit - …` preset you installed earlier never showed up, reinstall
 this build and re-run **🧵 Create Slicer Profile**; installing under the same
