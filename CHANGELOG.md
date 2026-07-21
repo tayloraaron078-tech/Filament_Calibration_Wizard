@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Backups now happen where the risk actually starts. Until now the only automatic backup was made at the very end of the flow, when a generated profile was installed — but the wizard directs you to hand-edit your filament and printer profiles from the first calibration step onward, and none of those files were protected. Prompted by a Discord suggestion that profile backups should be offered up front, not only at install time.
+Backups now happen where the risk actually starts. Until now the only automatic backup was made at the very end of the flow, when a generated profile was installed — but the wizard directs you to hand-edit your filament and printer profiles from the first calibration step onward, and none of those files were protected. Thanks to **confuzled** on the community Discord for raising this: profile backups should be offered up front — "the very first step upon installation should be prompting the user to back up (manually or automatically) their current profiles."
 
 ### Added
 
