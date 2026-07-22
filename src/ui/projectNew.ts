@@ -112,6 +112,11 @@ export async function renderNewProject(root: HTMLElement): Promise<void> {
     if (printer && m.bedTemp.min > printer.maxBedTemp) {
       warnings.push(`Typical bed temps (${m.bedTemp.min}–${m.bedTemp.max} °C) exceed this printer's bed limit (${printer.maxBedTemp} °C).`);
     }
+    // Chamber-aware guidance uses the printer database's heatedChamber field
+    // when it's known. Absent/undefined means "not specified" — stay silent.
+    if (printer && m.enclosureRecommended && printer.heatedChamber === false) {
+      warnings.push(`${m.label} warps without a warm, enclosed build space, and "${printer.name}" has no heated chamber. An enclosure (even passive) helps; expect warping otherwise.`);
+    }
     materialInfo.append(
       h('div', { class: 'panel' },
         h('p', { style: 'margin:.2rem 0' }, h('strong', {}, m.label), ` — ${m.description}`),

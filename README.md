@@ -50,6 +50,80 @@ npm run preview      # serve the production bundle locally
 
 `dist/` is fully static and uses relative paths — it works from any folder or subpath.
 
+## Updating the Printer Database
+
+The Add Printer screen lets users pick from a database of known printers, which
+auto-fills the machine specs (temperature limits, extruder type, build volume,
+supported nozzle sizes, chamber, firmware…). That database is generated from a
+human-editable spreadsheet and committed as JSON, so no build tooling or Excel
+is needed at runtime.
+
+**Source of truth:** [`Printer_Database/Printer_Database.xlsx`](Printer_Database/Printer_Database.xlsx)
+→ worksheet **`Printer Specifications`**.
+**Runtime data:** [`src/data/printers.json`](src/data/printers.json) (committed;
+bundled into the app).
+**Generator:** [`scripts/generate-printer-database.mjs`](scripts/generate-printer-database.mjs)
+(plain Node, no dependencies — works on Windows, macOS, Linux, and CI).
+
+To add or change a printer:
+
+1. Open `Printer_Database/Printer_Database.xlsx`.
+2. Add or edit a row on the **Printer Specifications** sheet. Keep the existing
+   column order (see below). The `Data Sources` sheet is provenance only and is
+   ignored by the generator.
+3. Save the workbook.
+4. Regenerate the runtime data and review the printed warnings:
+   ```bash
+   npm run generate:printers
+   ```
+5. Run the tests:
+   ```bash
+   npm test
+   ```
+6. Commit **both** the workbook and `src/data/printers.json`. The next release
+   build picks them up automatically — CI does not regenerate the JSON, so the
+   committed file is what ships.
+
+Validate without changing the committed file (used in CI / pre-release):
+
+```bash
+npm run validate:printers   # exits non-zero if printers.json is stale
+```
+
+### Column reference
+
+| Column | Field | Notes |
+| --- | --- | --- |
+| Manufacturer | required | brand |
+| Printer Model | required | may include the brand prefix; the id de-duplicates it |
+| Technology | optional | e.g. FFF |
+| Extruder Type | optional | `Direct Drive` → `direct-drive`, `Bowden` → `bowden`, mixed → `mixed` |
+| Max Nozzle/Bed/Chamber Temp (C) | optional | numbers |
+| Heated Chamber | optional | `Yes`/`No` → boolean; blank → unknown |
+| Max Volumetric Flow (mm3/s) | optional | number |
+| Default Nozzle Diameter (mm) | optional | number |
+| Supported Nozzle Sizes (mm) | optional | comma list, e.g. `0.2, 0.4, 0.6`; suffixes like `0.4HS` and `0.4+0.6` are read as their diameters |
+| Build Volume X/Y/Z (mm) | optional | numbers |
+| Max Print Speed / Acceleration | optional | numbers |
+| Firmware, Number of Extruders, AMS/MMU Compatibility, Release Year, Profile Source, Source File, Notes | optional | passed through |
+
+**Rules the generator enforces:**
+
+- **Blank vs. unknown:** empty cells become `null` (or are omitted). A real `0`
+  is preserved. The app renders unknown values as “Not specified”, never `0`.
+- **Duplicates:** rows with the same manufacturer + model are flagged as
+  warnings and each is kept with a distinct id (`…-2`, `…-3`).
+- **Empty rows** are skipped; **rows with data but no manufacturer/model** are
+  reported as warnings, never silently dropped.
+- **IDs** are stable, readable slugs derived from manufacturer + model
+  (`bambu-lab-x1-carbon`, `creality-ender-3-v3-ke`), with collision suffixing.
+  Never rename an id when you edit a row’s other fields — saved user printers
+  reference it. For a **renamed or discontinued** model, keep the row (and its
+  id) and note the change in the Notes column rather than deleting it, so
+  existing profiles keep their database link.
+- Output is **deterministic** (sorted, no timestamp) so regeneration produces a
+  clean diff.
+
 ## Hosting on Nginx
 
 ```nginx
