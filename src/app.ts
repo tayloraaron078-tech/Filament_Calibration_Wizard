@@ -10,6 +10,8 @@ import { renderSettings } from './ui/settings';
 import { renderCard } from './ui/card';
 import { renderReport } from './ui/report';
 import { renderProfileWizard } from './ui/profileWizard';
+import { isDesktop, openExternalUrl } from './slicerIntegration/bridge';
+import { toast } from './ui/dom';
 import type { CalibrationId } from './types';
 
 export type Route =
@@ -122,9 +124,30 @@ function updateNav(r: Route): void {
   });
 }
 
+/**
+ * In the desktop (Tauri) app, `target="_blank"` anchors silently do nothing —
+ * the webview has nowhere to open a new tab. Intercept clicks on external
+ * http(s) links and hand them to the OS default browser via the native command.
+ * In the browser build this handler is inert, so normal `_blank` behavior stays.
+ */
+function installExternalLinkHandler(): void {
+  if (!isDesktop()) return;
+  document.addEventListener('click', (e) => {
+    // Left-click only; modifier keys have no useful default in the webview, so
+    // we still handle them rather than letting them do nothing.
+    if (e.defaultPrevented || e.button !== 0) return;
+    const anchor = (e.target as HTMLElement | null)?.closest('a');
+    const href = anchor?.getAttribute('href');
+    if (!href || !/^https?:\/\//i.test(href)) return; // in-app #/ routes fall through
+    e.preventDefault();
+    openExternalUrl(href).catch(() => toast('Could not open the link in your browser.', 'error'));
+  });
+}
+
 export function startApp(): void {
   applyTheme();
   onPreferredColorSchemeChange(applyTheme);
+  installExternalLinkHandler();
 
   const root = document.getElementById('app')!;
   clear(root);

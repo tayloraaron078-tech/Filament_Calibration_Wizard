@@ -103,6 +103,11 @@ export function openProfileDirectory(path: string): Promise<void> {
   return invoke('open_profile_directory', { path });
 }
 
+/** Open an http(s) URL in the OS default browser (desktop only). */
+export function openExternalUrl(url: string): Promise<void> {
+  return invoke('open_external_url', { url });
+}
+
 export function installGeneratedProfile(args: {
   slicerId: IntegrationSlicerId;
   accountId: string;
