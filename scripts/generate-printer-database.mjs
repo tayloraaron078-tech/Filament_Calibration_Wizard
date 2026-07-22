@@ -258,6 +258,18 @@ function str(raw) {
   return raw === undefined || raw === '' ? null : raw;
 }
 
+/**
+ * Locale-independent, case-insensitive string comparator. Compares lowercased
+ * strings by Unicode code point (identical on every JS engine), tie-broken by
+ * the raw string so ordering is fully stable and reproducible across machines.
+ */
+function byText(a, b) {
+  const al = a.toLowerCase(), bl = b.toLowerCase();
+  if (al < bl) return -1;
+  if (al > bl) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 // --- build -----------------------------------------------------------------
 
 function build() {
@@ -349,12 +361,14 @@ export function buildDatabase(rawRows) {
   }
 
   // Deterministic ordering: manufacturer, then model (case-insensitive).
+  // Uses a code-point comparison rather than localeCompare — localeCompare's
+  // result depends on the host ICU version, which differs between a dev machine
+  // and CI and would make the committed JSON fail `--check` on the runner.
   printers.sort((a, b) =>
-    a.manufacturer.toLowerCase().localeCompare(b.manufacturer.toLowerCase()) ||
-    a.model.toLowerCase().localeCompare(b.model.toLowerCase()));
+    byText(a.manufacturer, b.manufacturer) || byText(a.model, b.model));
 
   const manufacturers = [...new Set(printers.map(p => p.manufacturer))]
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    .sort(byText);
 
   // No generated timestamp in committed output — it would create needless git
   // churn and make the build nondeterministic. schemaVersion + counts suffice.
@@ -390,7 +404,10 @@ function main() {
   if (CHECK_MODE) {
     let current = '';
     try { current = readFileSync(OUT_PATH, 'utf8'); } catch { /* missing */ }
-    if (current !== json) {
+    // Compare newline-insensitively: git may check the committed file out with
+    // CRLF on Windows CI, which must not count as "stale".
+    const norm = (s) => s.replace(/\r\n/g, '\n');
+    if (norm(current) !== norm(json)) {
       console.error('\n✖ src/data/printers.json is out of date with the workbook.');
       console.error('  Run: npm run generate:printers\n');
       process.exit(1);

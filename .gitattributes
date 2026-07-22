@@ -1,0 +1,6 @@
+# Keep the generated printer database and its generator checked out with LF on
+# every OS. Windows CI otherwise converts them to CRLF, and the byte-for-byte
+# `npm run validate:printers` check (and clean diffs on regeneration) depend on
+# a stable line ending.
+src/data/printers.json text eol=lf
+scripts/generate-printer-database.mjs text eol=lf
