@@ -126,12 +126,39 @@ describe('data migration', () => {
       printers: []
     } as unknown as BackupFile;
     const out = migrate(file);
-    expect(out.schemaVersion).toBe(2);
+    expect(out.schemaVersion).toBe(3);
     const p = out.projects[0];
     expect(Array.isArray(p.timeline)).toBe(true);
     expect(p.finals).toBeDefined();
     expect(p.generatedProfiles).toEqual([]);
     expect(Array.isArray((p.steps as Record<string, { history: unknown[] }>).temperature.history)).toBe(true);
+  });
+
+  it('adds v3 steps (flow-verify, shrinkage) to older projects at canonical positions', () => {
+    const file = {
+      app: 'perfectfit-filament-calibration-wizard',
+      schemaVersion: 2,
+      exportedAt: '',
+      projects: [{
+        id: 'x', filament: {}, finals: {}, timeline: [],
+        steps: {
+          temperature: { status: 'completed', current: null, history: [] },
+          'pressure-advance': { status: 'completed', current: null, history: [] }
+        },
+        stepOrder: ['temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance', 'retraction', 'max-volumetric-speed', 'final-verification']
+      }],
+      printers: []
+    } as unknown as BackupFile;
+    const out = migrate(file);
+    const p = out.projects[0];
+    expect(p.stepOrder).toEqual([
+      'temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance',
+      'flow-verify', 'retraction', 'max-volumetric-speed', 'shrinkage', 'final-verification'
+    ]);
+    expect(p.steps['flow-verify'].status).toBe('not-started');
+    expect(p.steps.shrinkage.status).toBe('not-started');
+    // Existing progress untouched.
+    expect(p.steps.temperature.status).toBe('completed');
   });
 });
 

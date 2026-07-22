@@ -35,6 +35,7 @@ export const MATERIALS: MaterialPreset[] = [
     mvsRange: { start: 4, end: 15, step: 0.5 }, typicalMvs: 9,
     hygroscopic: true,
     warnings: [
+      'PETG often arrives WET from the factory — standard plastic bags with desiccant are not proof of dryness. Dry it before calibrating (typically 65 °C for 4–6 h), even brand-new spools.',
       'PETG can bond permanently to bare glass or PEI at high bed temps — use a release agent or textured plate if unsure.',
       'PETG strings more than PLA; expect to rely on the retraction test.'
     ]
@@ -47,7 +48,10 @@ export const MATERIALS: MaterialPreset[] = [
     startingFlowRatio: 0.95,
     mvsRange: { start: 4, end: 15, step: 0.5 }, typicalMvs: 9,
     hygroscopic: true,
-    warnings: ['Check that your hotend is rated for sustained printing at 260 °C+.']
+    warnings: [
+      'Like PETG, PCTG can arrive wet even in sealed packaging — dry new spools before calibrating.',
+      'Check that your hotend is rated for sustained printing at 260 °C+.'
+    ]
   },
   {
     id: 'ABS', label: 'ABS',
@@ -81,6 +85,7 @@ export const MATERIALS: MaterialPreset[] = [
     mvsRange: { start: 1, end: 8, step: 0.5 }, typicalMvs: 3.5,
     flexible: true, hygroscopic: true,
     warnings: [
+      'TPU frequently arrives WET even in sealed factory bags, and wet TPU strings and bubbles badly — dry it before calibrating (typically 50–60 °C for 6–12 h), even brand-new spools.',
       'Flexible filaments can bind or buckle in Bowden systems — reduce retraction drastically and print slowly.',
       'High retraction with TPU commonly jams extruders. Start near zero.'
     ]

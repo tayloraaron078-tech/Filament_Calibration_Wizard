@@ -16,8 +16,10 @@ const WEIGHTS: Record<CalibrationId, number> = {
   'flow-pass1': 16,
   'flow-pass2': 8,
   'pressure-advance': 16,
+  'flow-verify': 5,
   retraction: 12,
   'max-volumetric-speed': 12,
+  shrinkage: 6,
   'final-verification': 14
 };
 
@@ -32,7 +34,11 @@ export function confidenceScore(p: CalibrationProject): ConfidenceBreakdown {
   const parts: ConfidenceBreakdown['parts'] = [];
   let earnedTotal = 0;
   let possibleTotal = 0;
-  for (const id of Object.keys(WEIGHTS) as CalibrationId[]) {
+  // Score only the steps that exist in THIS project's plan, so projects
+  // created before a step was introduced don't lose points for it.
+  const ids = (p.stepOrder?.length ? p.stepOrder : Object.keys(WEIGHTS) as CalibrationId[])
+    .filter(id => WEIGHTS[id] !== undefined);
+  for (const id of ids) {
     const possible = WEIGHTS[id];
     possibleTotal += possible;
     const st = p.steps[id];

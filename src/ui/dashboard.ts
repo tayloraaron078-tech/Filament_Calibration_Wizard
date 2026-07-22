@@ -8,6 +8,7 @@ import { confidenceScore } from '../logic/confidence';
 import { exportProject } from '../export/backup';
 import { importFilePicker } from './importExport';
 import { hasCalibratedValues } from './projectView';
+import { maybeFirstRunBackupCard } from './presetBackupPrompt';
 import type { CalibrationProject, PrinterProfile } from '../types';
 import { getMaterial } from '../data/materials';
 
@@ -30,6 +31,9 @@ export async function renderDashboard(root: HTMLElement): Promise<void> {
       'Everything is stored on this device only — no account, no cloud, no telemetry. ',
       h('a', { href: '#/settings' }, 'Back up your data'), ' regularly.')
   );
+
+  const firstRunCard = await maybeFirstRunBackupCard();
+  if (firstRunCard) root.append(firstRunCard);
 
   if (active.length === 0) {
     root.append(
@@ -74,6 +78,7 @@ function projectCard(p: CalibrationProject, printers: Map<string, PrinterProfile
   if (f.pressureAdvance !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `🏎 PA ${f.pressureAdvance}`));
   if (f.retractionDistance !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `🧵 ${f.retractionDistance}mm`));
   if (f.maxVolumetricSpeed !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `⚡ ${f.maxVolumetricSpeed}mm³/s`));
+  if (f.shrinkagePercent !== undefined) vals.push(h('span', { class: 'badge badge-info' }, `📐 ${f.shrinkagePercent}%`));
 
   return h('div', { class: 'card proj-card' },
     h('div', { style: 'display:flex;justify-content:space-between;gap:.5rem;align-items:baseline' },

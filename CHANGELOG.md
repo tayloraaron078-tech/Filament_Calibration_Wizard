@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 - 2026-07-21
+
+Backups now happen where the risk actually starts. Until now the only automatic backup was made at the very end of the flow, when a generated profile was installed — but the wizard directs you to hand-edit your filament and printer profiles from the first calibration step onward, and none of those files were protected. Thanks to **confuzled** on the community Discord for raising this: profile backups should be offered up front — "the very first step upon installation should be prompting the user to back up (manually or automatically) their current profiles."
+
+### Added
+
+- **Whole-library preset snapshots.** A new native command backs up every user preset (`filament/`, `machine/`, and `process/` folders of each slicer account) into the existing checksummed backup store — same manifest format, so the Settings list, verified restore, and delete all work unchanged. Slicer-managed `base/` caches and non-preset files are excluded.
+- **Pre-calibration backup prompt on every project.** Projects with remaining calibration steps show a callout offering a one-click snapshot of the project's slicer presets (falling back to all detected slicers) before any profile edits are suggested. The outcome — backed up or skipped — is recorded on the project and in its timeline. The browser build, which cannot write backups, shows manual backup guidance instead.
+- **First-run backup prompt.** On first use of the desktop app (once a slicer with user presets is detected), the dashboard offers to back up all detected slicers' preset libraries. Shown once; dismissible.
+- **Manual snapshots in Settings.** "Back up all slicer presets now" in Settings → Slicer profile backups snapshots every detected slicer on demand.
+- **New calibration step: Flow Ratio Re-check (after Pressure Advance).** Suggested by **confuzled**: PA changes how plastic is distributed through speed transitions, so a flow ratio judged before PA can be a fine step off. The new step re-runs the fine flow plate with PA active — the 0% block winning confirms the saved value; a neighbor winning catches the error cheaply. Sits between Pressure Advance and Retraction in the default order.
+- **New calibration step: Shrinkage / Dimensional Accuracy.** Also suggested by **confuzled**. Three methods, with links in the wizard: ap.engineering's free calibration plate on Printables (squares/diamonds at known 150–25 mm sizes; enter the author's spreadsheet scale-error result — the wizard converts it via shrinkage% = 100 + error — or two caliper measurements directly), Vector3D's paid CaliFlower MK2 (enter its calculator's percentages), or any large measured object (the app computes measured ÷ nominal × 100 and averages X/Y, warning when the axes disagree enough to indicate a printer mechanical issue). The result lands in the filament profile's Shrinkage field, appears on reports/cards, and — new mapping — is patched into generated profiles as `filament_shrink` ("99.4%"-style percent string).
+- Projects created before this release gain both new steps automatically as not-started, inserted at their canonical position (existing progress, scores, and any custom step order are preserved).
+
+### Changed
+
+- **Drying advice no longer treats "fresh from a sealed bag" as dry** (thanks again, **confuzled**). PETG, TPU, PCTG and other hygroscopic materials often arrive wet from the factory even in sealed bags with desiccant. The pre-flight checklist now says dried-by-you is the requirement, and the PETG/PCTG/TPU material warnings call out factory-wet spools with drying temperatures.
+- **Bambu Studio Developer-mode instructions now describe the real UI.** The Preferences checkbox is literally labeled "Develop Mode" (a translation quirk the instructions now call out), and enabling it adds a **Calibration button to the title bar next to the Redo arrow** — the same menu Orca-based slicers have — rather than a "Calibration tab". Every Bambu test's menu path was corrected accordingly.
+- **Each test now names the profile you're supposed to modify.** The New Project form's "Starting filament profile" field suggests the presets actually detected in your slicer (desktop app), **ranked for the filament and printer you selected** — the brand-matching preset (or Generic when your brand isn't stocked) for your material and printer comes first, with everything else after for advanced users, and the ranking updates live as you change brand, material, or printer. Both the slicer-instructions step and the "Save it in the slicer" panel display that profile so values land in the right preset instead of whichever one happens to be selected.
+- Settings: the app-data backup card is now titled "App data backup (projects & printers)" and both backup cards cross-reference each other, so PerfectFit's own data export is no longer confusable with slicer preset backups.
+- The final verification checklist gained a "Dimensional accuracy" category whose ranked causes point at shrinkage and fine flow.
+
 ## 1.1.5 - 2026-07-20
 
 Fixes generated Bambu profiles still not appearing in the slicer when cloned from a stock (system) preset — the normal path since 1.1.4 started recommending stock baselines. Diagnosed against a real signed-in Bambu Studio 2.7.x install (H2S). See [docs/RELEASE_NOTES_1.1.5.md](docs/RELEASE_NOTES_1.1.5.md).

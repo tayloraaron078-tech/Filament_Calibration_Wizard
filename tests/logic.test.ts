@@ -146,7 +146,10 @@ describe('calibration definitions integrity', () => {
 
   it('Bambu Studio Developer mode guidance covers all affected coached steps', () => {
     const bambu = getSlicerContent('bambu', '1.7+');
-    expect(bambu.calibrationMenuPath).toMatch(/Developer mode/i);
+    // Bambu's Preferences checkbox is literally labeled "Develop Mode";
+    // the tests live under the title-bar Calibration button it reveals.
+    expect(bambu.calibrationMenuPath).toMatch(/Develop(er)? Mode/i);
+    expect(bambu.calibrationMenuPath).toMatch(/title bar/i);
 
     const developerModeSteps: CalibrationId[] = [
       'temperature',
@@ -167,7 +170,8 @@ describe('calibration definitions integrity', () => {
         ...(instructions?.steps ?? []),
         ...(instructions?.gotchas ?? [])
       ].join(' ');
-      expect(text, id).toMatch(/Developer mode/i);
+      expect(text, id).toMatch(/Develop(er)? mode/i);
+      expect(text, id).toMatch(/title bar/i);
       expect(text, id).toMatch(/non–Bambu-Lab printer profile/i);
     }
   });

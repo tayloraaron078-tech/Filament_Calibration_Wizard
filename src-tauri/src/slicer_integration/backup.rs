@@ -135,6 +135,107 @@ pub fn create_backup(
     Ok(manifest)
 }
 
+/// Subdirectories of a user account dir that hold user-editable presets.
+const PRESET_LIBRARY_DIRS: &[&str] = &["filament", "machine", "process"];
+
+/// Largest file included in a library snapshot (a preset is a few KB).
+const MAX_SNAPSHOT_FILE_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Hard cap so a misconfigured directory can never balloon a snapshot.
+const MAX_SNAPSHOT_FILES: usize = 5000;
+
+/// Collect every preset file (.json/.info) directly inside the account's
+/// filament/, machine/ and process/ dirs. Non-recursive: base/ caches and
+/// other subdirectories are slicer-managed, not user-edited.
+pub fn user_preset_files(user_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for sub in PRESET_LIBRARY_DIRS {
+        let dir = user_dir.join(sub);
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if !p.is_file() {
+                continue;
+            }
+            let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if security::validate_preset_extension(name).is_err() {
+                continue;
+            }
+            if std::fs::metadata(&p)
+                .map(|m| m.len() > MAX_SNAPSHOT_FILE_BYTES)
+                .unwrap_or(true)
+            {
+                continue;
+            }
+            out.push(p);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Snapshot an entire user preset library into the regular backup system.
+/// Produces the same manifest format as install backups, so listing, restore,
+/// and delete work unchanged. `label` fills the manifest's profile-name slot
+/// shown in the backups list.
+pub fn snapshot_user_presets_core(
+    all_backups_root: &Path,
+    slicer_id: &str,
+    label: &str,
+    project_id: &str,
+    user_dir: &Path,
+) -> Result<ProfileBackupManifest, String> {
+    let files = user_preset_files(user_dir);
+    if files.is_empty() {
+        return Err(format!(
+            "No user preset files found under {} — nothing to back up.",
+            user_dir.display()
+        ));
+    }
+    if files.len() > MAX_SNAPSHOT_FILES {
+        return Err(format!(
+            "Refusing to snapshot {} files (limit {MAX_SNAPSHOT_FILES}) — this does not look like a preset library.",
+            files.len()
+        ));
+    }
+    create_backup(all_backups_root, slicer_id, None, label, project_id, &files)
+}
+
+/// Back up a slicer account's whole user preset library (filament, machine,
+/// process presets) before the user starts editing profiles. Read-only with
+/// respect to slicer data; writes only into PerfectFit's backup folder.
+#[tauri::command]
+pub fn backup_slicer_user_presets(
+    app: tauri::AppHandle,
+    slicer_id: String,
+    account_id: String,
+    project_id: String,
+) -> Result<RawBackupSummary, String> {
+    security::validate_component(&account_id)?;
+    let slicer = super::descriptor(&slicer_id)?;
+    let data_root = security::platform_data_root()?;
+    let slicer_root = data_root.join(slicer.data_dir_name);
+    let user_dir = slicer_root.join("user").join(&account_id);
+    if !user_dir.is_dir() {
+        return Err(format!("USER_DATA_NOT_FOUND: {}", user_dir.display()));
+    }
+    security::ensure_under(&slicer_root, &user_dir)?;
+    let backups_root = backups_root(&app)?;
+    let label = format!("Preset library snapshot ({account_id})");
+    let m = snapshot_user_presets_core(&backups_root, &slicer_id, &label, &project_id, &user_dir)?;
+    Ok(RawBackupSummary {
+        backup_id: m.backup_id,
+        slicer_id: m.slicer_id,
+        created_at: m.created_at,
+        installed_profile_name: m.installed_profile_name,
+        perfectfit_project_id: m.perfect_fit_project_id,
+        file_count: m.files.len(),
+        backup_root: m.backup_root,
+    })
+}
+
 fn load_manifest(app: &tauri::AppHandle, backup_id: &str) -> Result<ProfileBackupManifest, String> {
     security::validate_component(backup_id)?;
     let root = backups_root(app)?;
@@ -285,4 +386,115 @@ pub fn open_backup_directory(app: tauri::AppHandle, backup_id: String) -> Result
     let manifest = load_manifest(&app, &backup_id)?;
     let root = backups_root(&app)?;
     super::processes::open_directory_checked(Path::new(&manifest.backup_root), &[root])
+}
+
+// ---------------------------------------------------------------------------
+// Integration tests — always temp directories, never real slicer data.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TempUserRoot(PathBuf);
+    impl TempUserRoot {
+        fn new(tag: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "perfectfit-snapshot-test-{tag}-{}-{}",
+                std::process::id(),
+                super::super::now_unix()
+            ));
+            std::fs::create_dir_all(dir.join("user/default/filament/base")).unwrap();
+            std::fs::create_dir_all(dir.join("user/default/machine")).unwrap();
+            std::fs::create_dir_all(dir.join("user/default/process")).unwrap();
+            std::fs::create_dir_all(dir.join("backups")).unwrap();
+            TempUserRoot(dir)
+        }
+        fn user_dir(&self) -> PathBuf {
+            self.0.join("user/default")
+        }
+        fn backups(&self) -> PathBuf {
+            self.0.join("backups")
+        }
+    }
+    impl Drop for TempUserRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn snapshot(t: &TempUserRoot) -> Result<ProfileBackupManifest, String> {
+        snapshot_user_presets_core(
+            &t.backups(),
+            "orca",
+            "Preset library snapshot (default)",
+            "proj-1",
+            &t.user_dir(),
+        )
+    }
+
+    #[test]
+    fn snapshot_covers_filament_machine_process_and_skips_caches() {
+        let t = TempUserRoot::new("scope");
+        let u = t.user_dir();
+        std::fs::write(u.join("filament/My PLA.json"), "{\"a\":1}").unwrap();
+        std::fs::write(u.join("filament/My PLA.info"), "sync_info =\n").unwrap();
+        std::fs::write(u.join("machine/My Printer.json"), "{\"b\":2}").unwrap();
+        std::fs::write(u.join("process/0.20 Standard.json"), "{\"c\":3}").unwrap();
+        // Must be ignored: base/ cache, non-preset extensions.
+        std::fs::write(u.join("filament/base/Cloud PLA.json"), "{\"cache\":true}").unwrap();
+        std::fs::write(u.join("filament/notes.txt"), "not a preset").unwrap();
+
+        let m = snapshot(&t).unwrap();
+        assert_eq!(m.files.len(), 4, "filament json+info, machine, process");
+        assert!(m.files.iter().all(|f| f.existed_before));
+        for f in &m.files {
+            assert!(!f.original_path.contains("base"), "cache leaked into snapshot: {}", f.original_path);
+            assert!(!f.original_path.ends_with(".txt"));
+        }
+    }
+
+    #[test]
+    fn snapshot_restore_round_trip_recovers_edited_and_deleted_presets() {
+        let t = TempUserRoot::new("roundtrip");
+        let u = t.user_dir();
+        let filament = u.join("filament/My PLA.json");
+        let machine = u.join("machine/My Printer.json");
+        std::fs::write(&filament, "{\"flow\":\"0.98\"}").unwrap();
+        std::fs::write(&machine, "{\"retract\":\"0.8\"}").unwrap();
+
+        let m = snapshot(&t).unwrap();
+
+        // Simulate what a calibration session can do: edit one file, delete another.
+        std::fs::write(&filament, "{\"flow\":\"1.15\"}").unwrap();
+        std::fs::remove_file(&machine).unwrap();
+
+        let (restored, deleted) = restore_backup_inner(&m, &t.0).unwrap();
+        assert_eq!(restored.len(), 2);
+        assert!(deleted.is_empty());
+        assert_eq!(std::fs::read_to_string(&filament).unwrap(), "{\"flow\":\"0.98\"}");
+        assert_eq!(std::fs::read_to_string(&machine).unwrap(), "{\"retract\":\"0.8\"}");
+    }
+
+    #[test]
+    fn empty_library_is_an_error_and_creates_no_backup() {
+        let t = TempUserRoot::new("empty");
+        let err = snapshot(&t).err().expect("empty library must not snapshot");
+        assert!(err.contains("nothing to back up"), "{err}");
+        assert_eq!(std::fs::read_dir(t.backups()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn oversized_files_are_skipped() {
+        let t = TempUserRoot::new("oversize");
+        let u = t.user_dir();
+        std::fs::write(u.join("filament/ok.json"), "{}").unwrap();
+        std::fs::write(
+            u.join("filament/huge.json"),
+            vec![b' '; (MAX_SNAPSHOT_FILE_BYTES + 1) as usize],
+        )
+        .unwrap();
+        let m = snapshot(&t).unwrap();
+        assert_eq!(m.files.len(), 1);
+        assert!(m.files[0].original_path.ends_with("ok.json"));
+    }
 }

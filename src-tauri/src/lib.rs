@@ -45,6 +45,7 @@ pub fn run() {
       processes::detect_running_slicer_process,
       processes::open_slicer,
       processes::open_profile_directory,
+      backup::backup_slicer_user_presets,
       backup::list_profile_backups,
       backup::get_profile_backup_manifest,
       backup::restore_profile_backup,

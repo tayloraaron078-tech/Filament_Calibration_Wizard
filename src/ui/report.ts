@@ -19,7 +19,8 @@ export async function copyFinalsToClipboard(p: CalibrationProject): Promise<void
     f.pressureAdvance !== undefined ? `Pressure advance: ${f.pressureAdvance}` : null,
     f.retractionDistance !== undefined ? `Retraction length: ${f.retractionDistance} mm` : null,
     f.retractionSpeed !== undefined ? `Retraction speed: ${f.retractionSpeed} mm/s` : null,
-    f.maxVolumetricSpeed !== undefined ? `Max volumetric speed: ${f.maxVolumetricSpeed} mm³/s` : null
+    f.maxVolumetricSpeed !== undefined ? `Max volumetric speed: ${f.maxVolumetricSpeed} mm³/s` : null,
+    f.shrinkagePercent !== undefined ? `Shrinkage (XY): ${f.shrinkagePercent}%` : null
   ].filter(Boolean);
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
@@ -67,7 +68,8 @@ export async function renderReport(root: HTMLElement, id: string): Promise<void>
         p.finals.pressureAdvance !== undefined ? row('Pressure advance', String(p.finals.pressureAdvance)) : null,
         p.finals.retractionDistance !== undefined ? row('Retraction length', `${p.finals.retractionDistance} mm`) : null,
         p.finals.retractionSpeed !== undefined ? row('Retraction speed', `${p.finals.retractionSpeed} mm/s`) : null,
-        p.finals.maxVolumetricSpeed !== undefined ? row('Max volumetric speed', `${p.finals.maxVolumetricSpeed} mm³/s`) : null
+        p.finals.maxVolumetricSpeed !== undefined ? row('Max volumetric speed', `${p.finals.maxVolumetricSpeed} mm³/s`) : null,
+        p.finals.shrinkagePercent !== undefined ? row('Shrinkage (XY)', `${p.finals.shrinkagePercent}%`) : null
       )))
     )
   );
