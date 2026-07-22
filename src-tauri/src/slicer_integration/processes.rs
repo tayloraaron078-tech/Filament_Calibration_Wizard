@@ -130,6 +130,46 @@ pub fn open_directory_checked(path: &Path, allowed_roots: &[std::path::PathBuf])
     Ok(())
 }
 
+/// Open an http/https URL in the user's default browser. Only web URLs are
+/// accepted — never file paths, custom schemes, or anything with control
+/// characters — and arguments are passed as a single argv (no shell), so there
+/// is no shell-metacharacter injection surface. Needed because `target="_blank"`
+/// anchors do nothing inside the webview.
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        return Err("Only http(s) links can be opened".into());
+    }
+    if trimmed.chars().any(|c| c.is_control()) {
+        return Err("Link contains invalid characters".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // explorer.exe launches the default browser for a web URL and, unlike
+        // `cmd /C start`, does not go through a shell.
+        no_window(Command::new("explorer").arg(trimmed))
+            .spawn()
+            .map_err(|e| format!("Failed to open link: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(trimmed)
+            .spawn()
+            .map_err(|e| format!("Failed to open link: {e}"))?;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(trimmed)
+            .spawn()
+            .map_err(|e| format!("Failed to open link: {e}"))?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_profile_directory(path: String) -> Result<(), String> {
     let data_root = security::platform_data_root()?;

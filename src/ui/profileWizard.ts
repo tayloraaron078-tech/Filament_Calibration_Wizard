@@ -45,6 +45,8 @@ interface WizState {
   newName: string;
   targetExtruder: number;
   applyAll: boolean;
+  /** Bambu Studio only: bake pressure advance into start g-code (M900). */
+  bakePaGcode: boolean;
   enabledPatchKeys: Set<string> | null;
   generated: GeneratedFilamentProfile | null;
   validation: ProfileValidationResult | null;
@@ -62,7 +64,7 @@ function stateFor(projectId: string): WizState {
       stage: 'slicer', installations: null, installation: null, location: null,
       scan: null, advanced: false, filterText: '', filterSource: 'all',
       filterCompatibleOnly: true, selectedBase: null, manualSlicerId: 'orca',
-      newName: '', targetExtruder: 0, applyAll: false, enabledPatchKeys: null,
+      newName: '', targetExtruder: 0, applyAll: false, bakePaGcode: false, enabledPatchKeys: null,
       generated: null, validation: null, acknowledged: new Set(),
       installResult: null, exportedTo: null
     };
@@ -326,7 +328,7 @@ async function renderProfilesStage(
     st.selectedBase = st.scan!.parsed.get(p.id) ?? null;
     if (!st.selectedBase) { toast('Internal error: profile not parsed.', 'error'); return; }
     st.newName = defaultName(project, printer);
-    st.targetExtruder = 0; st.applyAll = false; st.enabledPatchKeys = null;
+    st.targetExtruder = 0; st.applyAll = false; st.bakePaGcode = false; st.enabledPatchKeys = null;
     st.stage = 'configure';
     rerender();
   };
@@ -514,6 +516,27 @@ function renderConfigureStage(
         h('label', { class: 'check-item', style: 'align-self:end' }, allCb, h('span', {}, ' Apply to ALL slots (only if the calibrated values hold for every tool/hotend)'))));
   }
 
+  // Bambu Studio ignores the native pressure_advance field for Bambu machines,
+  // so offer to bake the calibrated K into the filament start g-code as M900.
+  // Orca-family targets honor the native field and never see this option.
+  if (base.profile.slicerId === 'bambu' && allPatches.some(p => p.presetKey === 'pressure_advance')) {
+    const bakeCb = h('input', { type: 'checkbox', checked: st.bakePaGcode }) as HTMLInputElement;
+    bakeCb.addEventListener('change', () => { st.bakePaGcode = bakeCb.checked; });
+    card.append(
+      h('h3', {}, 'Bambu Studio: pressure advance delivery'),
+      h('div', { class: 'callout callout-warn' },
+        h('label', { class: 'check-item' }, bakeCb,
+          h('div', {},
+            h('strong', {}, 'Bake pressure advance into start G-code (M900)'),
+            h('p', { class: 'coach-note' },
+              'Bambu Studio ignores the profile’s pressure-advance field for Bambu machines — the printer’s on-machine Flow Dynamics owns it. Tick this to write your calibrated value as “M900 K… L1000 M10” into the filament start G-code so it actually reaches the printer.'))),
+        h('p', { class: 'field-help', style: 'margin:.5rem 0 0' },
+          '⚠ For this to take effect you must turn Flow Dynamics off at print time: click ',
+          h('strong', {}, 'Print Plate'), ', then in the ', h('strong', {}, 'Send print job'),
+          ' dialog set ', h('strong', {}, 'Flow Dynamics Calibration'), ' to ',
+          h('strong', {}, 'Off'), ' (options are Auto / On / Off). Left On or Auto, the machine may override the baked value.')));
+  }
+
   card.append(h('div', { class: 'btn-row' },
     h('button', {
       class: 'btn btn-primary', onClick: () => {
@@ -524,7 +547,8 @@ function renderConfigureStage(
           st.generated = generateProfile({
             slicerId: base.profile.slicerId, baseProfile: base.profile, newName: name,
             patches, targetExtruderIndex: st.targetExtruder,
-            applyToAllExtruders: st.applyAll, project
+            applyToAllExtruders: st.applyAll,
+            bakePressureAdvanceGcode: st.bakePaGcode, project
           }, base);
         } catch (e) {
           toast(String(e), 'error'); return;

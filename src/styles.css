@@ -306,3 +306,26 @@ table.data th { color: var(--text-dim); font-size: .85rem; }
   .btn-row .btn { flex: 1 1 auto; }
   h1 { font-size: 1.35rem; }
 }
+
+/* --- printer database combobox ------------------------------------------- */
+.combo { position: relative; }
+.combo > input { width: 100%; }
+.combo-panel {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 320px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.combo-group {
+  position: sticky; top: 0; z-index: 1;
+  padding: .35rem .6rem; font-size: .78rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .03em;
+  color: var(--text-dim); background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.combo-item { padding: .4rem .6rem .4rem 1rem; cursor: pointer; font-size: .95rem; }
+.combo-item:hover, .combo-item.combo-active { background: var(--accent-soft); }
+.combo-empty { padding: .6rem; color: var(--text-dim); font-size: .9rem; }
+details.advanced { margin: .25rem 0 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .3rem .6rem; }
+details.advanced > summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
+details.advanced[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: .5rem; }

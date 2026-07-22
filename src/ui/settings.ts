@@ -8,6 +8,18 @@ import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerInt
 import * as bridge from '../slicerIntegration/bridge';
 import { backupDetectedPresetLibraries, totalFileCount } from '../slicerIntegration/libraryBackup';
 
+/**
+ * Render a backup timestamp in the local time of the machine running the app.
+ * The backend records `created_at` as a UTC ISO-8601 string (…Z); parsing it
+ * and formatting with the browser locale converts it to the user's zone, so
+ * the displayed time matches the PC clock instead of showing UTC.
+ */
+function formatBackupTime(createdAt: string): string {
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return createdAt; // fall back to raw string
+  return d.toLocaleString();
+}
+
 export function renderSettings(root: HTMLElement): void {
   const s = loadSettings();
 
@@ -169,7 +181,7 @@ function slicerBackupsCard(): HTMLElement {
       h('thead', {}, h('tr', {},
         h('th', {}, 'Created'), h('th', {}, 'Slicer'), h('th', {}, 'Profile'), h('th', {}, 'Files'), h('th', {}, ''))),
       h('tbody', {}, backups.map(b => h('tr', {},
-        h('td', {}, b.created_at.replace('T', ' ').replace('Z', ' UTC')),
+        h('td', {}, formatBackupTime(b.created_at)),
         h('td', {}, b.slicer_id),
         h('td', {}, b.installed_profile_name),
         h('td', {}, String(b.file_count)),

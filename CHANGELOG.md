@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0 - 2026-07-21
+
+Adds a printer specification database so setting up a printer no longer means looking up every temperature limit and machine spec by hand.
+
+### Added
+
+- **Printer specification database (379 models, 64 manufacturers).** When you add a printer, a searchable, manufacturer-grouped combobox lets you pick your exact machine and auto-fills the known specs: manufacturer, extruder type, max nozzle/bed/chamber temperature, heated-chamber status, max volumetric flow, default and supported nozzle diameters, build volume, max print speed/acceleration, firmware, number of extruders, and multi-material (AMS/MMU) compatibility. Every value stays editable afterwards for modified or custom hardware, and saved printers show a "✓ Specs from printer database" badge.
+- **Advanced machine specs section** on the printer form (chamber, build volume, supported nozzle sizes, speed/acceleration, firmware, MMU) with progressive disclosure so the common fields stay front-and-centre.
+- **Chamber-aware guidance.** New-project material warnings now flag enclosure-loving materials (ABS/ASA/PA/PC…) on a printer the database says has no heated chamber, alongside the existing max-temperature and max-flow guardrails. Selected nozzle sizes are sanity-checked against the printer's supported set.
+- **Maintainable data pipeline.** The database is edited in `Printer_Database/Printer_Database.xlsx`, regenerated with `npm run generate:printers` (a dependency-free Node script that reads the `.xlsx` directly — no Excel needed), validated with `npm run validate:printers`, and committed as `src/data/printers.json`. Documented under "Updating the Printer Database" in the README.
+- **Bambu Studio pressure advance: opt-in "bake into start G-code (M900)".** Verified on real hardware that Bambu Studio ignores a filament preset's `pressure_advance` field for Bambu machines (the printer's Flow Dynamics owns PA — the value never reaches the sliced G-code), whereas Orca-family slicers emit the command from the field for every printer. When generating a **Bambu Studio** profile with a calibrated pressure advance, a new opt-in checkbox writes the value into the filament start G-code as `M900 K<v> L1000 M10` (the exact command Orca emits for Bambu printers) so it actually reaches the machine. Off by default; Orca-family targets never see it (they'd double-apply). Requires setting **Flow Dynamics Calibration → Off** in the Send-print-job dialog, which the toggle's help spells out.
+
+### Fixed
+
+- **External links now open in the desktop app.** `target="_blank"` links (shrinkage test models, documentation, model downloads) did nothing when clicked inside the Tauri window — no opener was wired up. A native `open_external_url` command now routes external http(s) links to the OS default browser. The browser build is unaffected.
+
+### Changed
+
+- **Slicer preset backup timestamps display in local time.** Settings → Slicer profile backups previously showed the backup time in UTC; it now shows your PC's local time (the backend still records UTC internally).
+- **Pressure advance guidance corrected for Bambu.** The step notes now state accurately that Bambu Studio ignores the filament PA field for Bambu machines (Flow Dynamics owns it) and explain the M900-in-start-G-code path, while Orca-family slicers honor the native field directly.
+- Printer profiles gained optional extended-spec and database-link fields (schema v4). The change is additive — existing saved printers keep working, pre-v4 printers are treated as manually configured, and older backups migrate on import. Manual entry ("My printer is not listed") is unchanged.
+
 ## 1.2.0 - 2026-07-21
 
 Backups now happen where the risk actually starts. Until now the only automatic backup was made at the very end of the flow, when a generated profile was installed — but the wizard directs you to hand-edit your filament and printer profiles from the first calibration step onward, and none of those files were protected. Thanks to **confuzled** on the community Discord for raising this: profile backups should be offered up front — "the very first step upon installation should be prompting the user to back up (manually or automatically) their current profiles."

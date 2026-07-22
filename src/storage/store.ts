@@ -10,8 +10,13 @@ import { idb } from './db';
  * v2: adds CalibrationProject.generatedProfiles (slicer profile installer).
  * v3: adds the flow-verify and shrinkage calibration steps (existing projects
  *     gain them as not-started via ensureProjectSteps) and finals.shrinkagePercent.
+ * v4: adds optional extended machine specs + printer-database linkage to
+ *     PrinterProfile (model, maxChamberTemp, heatedChamber, supportedNozzle-
+ *     Diameters, buildVolume, maxPrintSpeed/Acceleration, firmware, extruder-
+ *     Count, multiMaterialCompatibility, releaseYear, databasePrinterId,
+ *     isManual). Purely additive — existing printers load unchanged.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // --- ids -------------------------------------------------------------------
 

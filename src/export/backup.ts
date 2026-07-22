@@ -110,7 +110,7 @@ export async function importBackup(json: string): Promise<ImportResult> {
   };
 }
 
-/** Migrate older schema versions forward. v3 is current. */
+/** Migrate older schema versions forward. v4 is current. */
 export function migrate(file: BackupFile): BackupFile {
   const v = file.schemaVersion ?? 1;
   let out = file;
@@ -122,6 +122,17 @@ export function migrate(file: BackupFile): BackupFile {
     // v2 → v3: flow-verify + shrinkage steps added; ensureProjectSteps below
     // inserts them as not-started.
     out = { ...out, schemaVersion: 3 };
+  }
+  if ((out.schemaVersion ?? 1) < 4) {
+    // v3 → v4: PrinterProfile gained optional extended specs + database link.
+    // Additive — printers without the new keys are already valid. Mark
+    // pre-v4 printers as manual so the UI doesn't imply a database match.
+    for (const printer of out.printers ?? []) {
+      if (printer.databasePrinterId === undefined && printer.isManual === undefined) {
+        printer.isManual = true;
+      }
+    }
+    out = { ...out, schemaVersion: 4 };
   }
   // Defensive normalization regardless of version:
   for (const p of out.projects ?? []) {

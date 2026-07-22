@@ -42,6 +42,72 @@ export interface PrinterProfile {
   notes: string;
   createdAt: string;
   updatedAt: string;
+
+  // --- Extended machine specs (schema v4; all optional) --------------------
+  // Populated from the printer database when a printer is selected, freely
+  // editable afterwards. `undefined` means "not specified" — never rendered as
+  // 0. Older saved printers simply lack these keys and keep working.
+  model?: string;
+  technology?: string;
+  maxChamberTemp?: number;       // °C
+  heatedChamber?: boolean;
+  supportedNozzleDiameters?: number[]; // mm
+  buildVolume?: { x?: number; y?: number; z?: number }; // mm
+  maxPrintSpeed?: number;        // mm/s
+  maxAcceleration?: number;      // mm/s²
+  firmware?: string;
+  extruderCount?: number;
+  multiMaterialCompatibility?: string; // e.g. "AMS", "MMU"
+  releaseYear?: number;
+
+  // --- Database linkage (schema v4) ----------------------------------------
+  /** Id of the source record in printers.json, or null/undefined if manual. */
+  databasePrinterId?: string | null;
+  /** printers.json schemaVersion this profile was populated from. */
+  databaseSchemaVersion?: number;
+  /** True when entered by hand (not matched to a database record). */
+  isManual?: boolean;
+}
+
+// --- Printer specification database (generated from Printer_Database.xlsx) --
+
+export type SpecExtruderType = 'direct-drive' | 'bowden' | 'mixed' | 'unknown';
+
+/** One printer record as produced by scripts/generate-printer-database.mjs. */
+export interface PrinterSpecification {
+  id: string;
+  manufacturer: string;
+  model: string;
+  technology?: string | null;
+  extruderType?: SpecExtruderType | null;
+  maxNozzleTempC?: number | null;
+  maxBedTempC?: number | null;
+  maxChamberTempC?: number | null;
+  heatedChamber?: boolean | null;
+  maxVolumetricFlowMm3s?: number | null;
+  defaultNozzleDiameterMm?: number | null;
+  supportedNozzleDiametersMm?: number[];
+  buildVolumeMm?: { x?: number | null; y?: number | null; z?: number | null };
+  maxPrintSpeedMmS?: number | null;
+  maxAccelerationMmS2?: number | null;
+  firmware?: string | null;
+  extruderCount?: number | null;
+  multiMaterialCompatibility?: string | null;
+  releaseYear?: number | null;
+  profileSource?: string | null;
+  sourceFile?: string | null;
+  notes?: string | null;
+}
+
+/** Shape of src/data/printers.json. */
+export interface PrinterDatabase {
+  schemaVersion: number;
+  source: string;
+  sheet: string;
+  printerCount: number;
+  manufacturerCount: number;
+  manufacturers: string[];
+  printers: PrinterSpecification[];
 }
 
 // --- Material presets ------------------------------------------------------
