@@ -1,0 +1,22 @@
+services:
+  perfectfit:
+    image: perfectfit:latest
+    container_name: perfectfit
+    restart: unless-stopped
+    networks:
+      - containers
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.perfectfit.rule=Host(`perfectfit.mynetwork.net`)"
+      - "traefik.http.routers.perfectfit.tls=true"
+      - "traefik.http.routers.perfectfit.tls.certresolver=letsencrypt"
+      - "traefik.http.services.perfectfit.loadbalancer.server.port=80"
+      - "traefik.http.routers.perfectfit.middlewares=default-headers@docker"
+
+networks:
+  containers:
+    name: containers
+    driver: bridge
+    attachable: true
+    driver_opts:
+      com.docker.network.bridge.name: br-containers
