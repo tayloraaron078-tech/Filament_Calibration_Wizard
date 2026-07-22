@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 - Unreleased
+
+### Fixed
+
+- **Blank window on Linux/Wayland (AppImage).** On some Wayland setups the app opened to an empty window, with `Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...` printed when launched from a terminal. WebKitGTK 2.42+ defaults to a DMABUF accelerated renderer whose EGL initialisation fails on those systems; the bundled AppImage is especially affected because it ships its own `libwayland-client` that can conflict with the host compositor. The app now sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` before the webview starts so WebKitGTK skips the failing path (only when you haven't set the variable yourself, so an explicit override still wins). Thanks to **RThomasHyde** for the report and for pinpointing the `libwayland-client` conflict. ([#17](https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard/issues/17))
+
 ## 1.3.0 - 2026-07-21
 
 Adds a printer specification database so setting up a printer no longer means looking up every temperature limit and machine spec by hand.
