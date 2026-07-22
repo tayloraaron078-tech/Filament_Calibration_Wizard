@@ -81,6 +81,26 @@ describe('validation', () => {
     expect(unacknowledgedWarnings(result, ['MVS_OVER_PRINTER']).some(w => w.code === 'MVS_OVER_PRINTER')).toBe(false);
   });
 
+  it('does not flag the baked M900 start g-code as a non-finite number', () => {
+    const project = makeProject();
+    const parsed = getAdapter('bambu').parseProfile(
+      { kind: 'detected', fileName: 'bambu-user-full-pctg-dualnozzle.json',
+        json: fixtureRaw('bambu-user-full-pctg-dualnozzle.json').json,
+        infoText: fixtureRaw('bambu-user-full-pctg-dualnozzle.json').info,
+        filePath: fixtureRaw('bambu-user-full-pctg-dualnozzle.json').path },
+      fixtureRaw('bambu-user-full-pctg-dualnozzle.json')
+    )!;
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF Bake Valid',
+      patches: buildPatchesFromProject(project), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: true, project
+    }, parsed);
+    // The g-code change is present but text-valued — must not error as numeric.
+    expect(generated.changedFields.some(c => c.presetKey === 'filament_start_gcode')).toBe(true);
+    const result = validateGeneratedProfile(generated, { project, printer, baseProfile: parsed.profile });
+    expect(result.errors.some(e => e.code === 'NON_FINITE')).toBe(false);
+  });
+
   it('detects field loss (round-trip preservation)', () => {
     const project = makeProject();
     const { generated, parsed } = generate(project);

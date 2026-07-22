@@ -113,7 +113,10 @@ export function validateGeneratedProfile(
   if (generated.changedFields.length === 0) {
     warnings.push(warn('NO_CHANGES', 'No calibrated values were applied — the new profile is an identical copy of the base.', true));
   }
+  // Text-valued preset fields (g-code blocks) are exempt from numeric sanity.
+  const NON_NUMERIC_KEYS = new Set(['filament_start_gcode', 'filament_end_gcode']);
   for (const c of generated.changedFields) {
+    if (NON_NUMERIC_KEYS.has(c.presetKey)) continue;
     // Percent-typed fields (e.g. filament_shrink "99.4%") carry a % suffix.
     const n = Number(String(c.after).replace(/%$/, ''));
     if (!Number.isFinite(n)) {
