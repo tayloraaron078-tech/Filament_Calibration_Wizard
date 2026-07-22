@@ -161,6 +161,15 @@ export interface ProfileGenerationRequest {
   targetExtruderIndex: number;
   /** Apply to every extruder position instead of only targetExtruderIndex. */
   applyToAllExtruders: boolean;
+  /**
+   * Bambu Studio only: bake the calibrated pressure advance into the filament
+   * start g-code as `M900 K<v> L1000 M10`. Bambu Studio ignores the native
+   * pressure_advance field for Bambu machines (they use on-machine Flow
+   * Dynamics), so this is the only way the value reaches the printer. Requires
+   * the user to set Flow Dynamics Calibration = Off in the Send-print-job
+   * dialog. No effect for Orca-family targets (which honor the native field).
+   */
+  bakePressureAdvanceGcode?: boolean;
   project: CalibrationProject;
 }
 

@@ -376,3 +376,71 @@ describe('system-leaf clones carry Bambu-native identity (H2S visibility bug)', 
     expect(reparsed.inherits).toEqual(original.inherits);
   });
 });
+
+// Bambu Studio ignores the native pressure_advance field for Bambu machines
+// (proven: it never reaches the sliced g-code; Flow Dynamics owns PA). The
+// opt-in bake writes the calibrated K into the filament start g-code as the
+// exact command Orca emits for Bambu printers. Orca-family targets, which do
+// honor the native field, must never get this injection (it would double-apply).
+describe('Bambu Studio: bake pressure advance into start g-code (M900)', () => {
+  const startGcode = (gen: ReturnType<typeof generateProfile>) =>
+    ((JSON.parse(gen.serialized) as Record<string, unknown>).filament_start_gcode as string[] | undefined) ?? [];
+
+  it('injects "M900 K<v> L1000 M10" for a Bambu target when opted in', () => {
+    const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF PA Bake',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: true, project: makeProject()
+    }, parsed);
+    expect(startGcode(generated).some(s => s.includes('M900 K0.035 L1000 M10'))).toBe(true);
+  });
+
+  it('does not inject when the toggle is off', () => {
+    const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF No Bake',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: false, project: makeProject()
+    }, parsed);
+    expect(startGcode(generated).some(s => s.includes('M900'))).toBe(false);
+  });
+
+  it('never injects for Orca-family targets even when requested (avoids double-apply)', () => {
+    const parsed = parseFixture('orca-user-delta-pla.json', 'orca');
+    const generated = generateProfile({
+      slicerId: 'orca', baseProfile: parsed.profile, newName: 'PF Orca NoBake',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: true, project: makeProject()
+    }, parsed);
+    expect(startGcode(generated).some(s => s.includes('M900'))).toBe(false);
+  });
+
+  it('preserves existing start g-code and replaces a prior baked line on regenerate', () => {
+    const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
+    // Simulate regenerating from a profile that already carries a stale bake.
+    (parsed.profile.rawProfile as Record<string, unknown>).filament_start_gcode =
+      ['; my custom start\nM900 K9.9 L1000 M10 ; PerfectFit pressure advance'];
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF PA Rebake',
+      patches: buildPatchesFromProject(makeProject()), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: true, project: makeProject()
+    }, parsed);
+    const joined = startGcode(generated).join('\n');
+    expect(joined).toContain('; my custom start');       // user content kept
+    expect(joined).toContain('M900 K0.035 L1000 M10');   // new value applied
+    expect(joined).not.toContain('K9.9');                // stale line removed, not stacked
+  });
+
+  it('does not inject when pressure advance was not calibrated', () => {
+    const parsed = parseFixture('bambu-user-full-pctg-dualnozzle.json', 'bambu');
+    const project = makeProject();
+    project.steps['pressure-advance'].status = 'skipped';
+    const generated = generateProfile({
+      slicerId: 'bambu', baseProfile: parsed.profile, newName: 'PF PA Skipped',
+      patches: buildPatchesFromProject(project), targetExtruderIndex: 0,
+      applyToAllExtruders: false, bakePressureAdvanceGcode: true, project
+    }, parsed);
+    expect(startGcode(generated).some(s => s.includes('M900'))).toBe(false);
+  });
+});

@@ -4,3 +4,6 @@ dist/
 .DS_Store
 
 .claude/
+
+# Stray slicer/CLI logs
+*.log

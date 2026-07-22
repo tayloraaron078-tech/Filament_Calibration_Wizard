@@ -179,12 +179,12 @@ export const CALIBRATIONS: Record<CalibrationId, CalibrationDef> = {
       { title: 'The transition zone', look: 'On towers/patterns, find where corners change from bulging (low) to gapped (high).', meaning: 'The best value sits at the cleanest point between those two failure modes — sharp corners, even width, no gaps.', severity: 'good' }
     ],
     resultPrecision: 3,
-    slicerDestination: { scope: 'filament', note: 'Filament settings → Filament → Advanced → Enable pressure advance + value. (Saved per filament; on Bambu printers this is the "K" factor.)' },
+    slicerDestination: { scope: 'filament', note: 'Filament settings → Filament → Advanced → Enable pressure advance + value. In Orca-family slicers this reaches the printer directly (Orca emits M900 K / SET_PRESSURE_ADVANCE from it). In Bambu Studio on a Bambu machine the field is ignored — the machine\'s Flow Dynamics owns PA — so PerfectFit can instead bake the value into the filament start G-code as M900 (opt-in on the Generate-profile screen).' },
     versionNotes: [
       'Orca v2.x: Calibration → Pressure advance offers Line, Pattern (adapted from Ellis\' generator), and Tower, each with direct-drive and Bowden defaults.',
       'Orca also offers Adaptive PA (per-flow-rate table) for high-speed printers — out of scope for this wizard\'s v1.',
       'Bambu Studio calls this "Flow Dynamics Calibration" (K value), with manual line test or automatic on X1/P1 lidar models.',
-      'On Bambu printers, uncheck the printer-side "Flow Dynamics Calibration" option when printing a manual test.'
+      'Verified 2026-07: Bambu Studio does NOT write the filament pressure_advance field into the sliced G-code for Bambu machines — Flow Dynamics governs PA. To apply a fixed K you must either use Flow Dynamics, or inject "M900 K<value> L1000 M10" via filament start G-code AND set Flow Dynamics Calibration = Off in the Send-print-job dialog (Auto/On/Off) at print time. Orca-family slicers do emit the command from the native field, including for Bambu printers.'
     ]
   },
 
