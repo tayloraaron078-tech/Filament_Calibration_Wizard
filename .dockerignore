@@ -1,0 +1,10 @@
+# Keep the Docker build context small and reproducible.
+# Dependencies are installed fresh via `npm ci`, and the app is
+# built inside the image, so none of these belong in the context.
+.git
+.github
+node_modules
+dist
+src-tauri/target
+*.log
+.DS_Store
