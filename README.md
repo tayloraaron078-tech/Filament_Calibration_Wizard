@@ -72,6 +72,27 @@ Served over HTTP(S), the app also installs as a PWA and works offline after firs
 > Moving the app to a different domain/port means starting fresh — export a backup first
 > and restore it from Settings.
 
+## Docker
+
+The repository ships a `Dockerfile` and an `example-docker-compose.yaml` for
+running the app as a container. The image is a multi-stage build: Node builds
+the static bundle, which is then served by a tiny BusyBox `httpd` — no Node,
+backend, or database in the runtime layer.
+
+```bash
+docker build -t perfectfit:latest .
+docker run -d -p 8080:80 --name perfectfit perfectfit:latest   # http://localhost:8080
+```
+
+`example-docker-compose.yaml` is a sample stack for reverse-proxying the
+container behind [Traefik](https://traefik.io/) with automatic Let's Encrypt
+TLS. Adjust the `Host(...)` rule, network, and image name to match your setup.
+Because the app uses hash-based routing and relative paths, the static server
+needs no SPA-fallback configuration.
+
+> The same per-origin storage note from the Nginx section applies: data lives
+> in the browser under the origin you serve from.
+
 ## Packaging as a desktop app (Tauri)
 
 Tauri v2 wraps the static build in a small native shell (preferred over Electron: ~10 MB vs ~150 MB).
