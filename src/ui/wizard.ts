@@ -253,6 +253,7 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
           card.append(frag(
             h('p', {}, h('strong', {}, 'Where: '), `${instructions.menuPath}`),
             instructions.builtIn ? h('p', {}, h('span', { class: 'badge badge-ok' }, '✓ Generated in-slicer — nothing to download')) : null,
+            multiToolCallout(printer, instructions.builtIn),
             instructions.disableFirst?.length ? h('div', { class: 'callout callout-warn' },
               h('p', { class: 'co-title' }, '⚠ Temporarily disable first'),
               h('ul', {}, instructions.disableFirst.map(d => h('li', {}, d)))) : null,
@@ -447,6 +448,24 @@ export async function renderWizard(root: HTMLElement, projectId: string, stepId:
   }
 
   renderStage();
+}
+
+/**
+ * Multi-tool warning for the built-in calibration tests.
+ *
+ * Verified in Orca's Plater.cpp: every calib_* function reads
+ * `params.extruder_id`, which is initialised to 0 and never set by any of the
+ * calibration dialogs — none of them expose an extruder picker. So the
+ * generated plate is always assigned to filament slot 1, regardless of which
+ * filament is "current". Reported by Guntram (Snapmaker U1, 4 tools) on the
+ * community Discord after having to reassign every object by hand.
+ */
+function multiToolCallout(printer: PrinterProfile | undefined, builtIn: boolean): HTMLElement | null {
+  if (!builtIn || !printer?.extruderCount || printer.extruderCount < 2) return null;
+  return h('div', { class: 'callout callout-warn' },
+    h('p', { class: 'co-title' }, `⚠ Multi-tool printer (${printer.extruderCount} extruders) — check the filament assignment`),
+    h('p', {}, 'The built-in calibration tests always place the generated plate on filament slot 1, and the calibration dialogs have no extruder picker — so there is no way to mark a different filament as "the one being tested".'),
+    h('p', {}, 'Either load the filament you are calibrating into slot 1 before running the test, or after the plate is generated, select all objects and switch them to the slot holding it. Check the temperature shown on the plate matches the filament you meant to test — if it does not, the test is using the wrong slot.'));
 }
 
 function presetName(p: CalibrationProject, printer?: PrinterProfile): string {

@@ -220,10 +220,11 @@ means editing/adding one data entry. Research notes with sources and verified fo
 [docs/RESEARCH.md](docs/RESEARCH.md).
 
 **Assumptions worth re-verifying when a new slicer version ships:**
-- Calibration menu still at top bar → `Calibration` (Orca) / `Calibration` tab (Bambu Studio)
+- Calibration menu still at top bar → `Calibration` (Orca) / `Calibration` tab plus the Develop Mode title-bar menu (Bambu Studio)
+- Menu entry labels still differ per slicer: Orca `Flow ratio` / `Retraction` / top-level `Max flowrate` vs Bambu `Flow rate` ▸ Coarse-Fine / `Retraction test` / `More...` ▸ `Max flowrate`
 - Temp tower still steps 5 °C per block; retraction/PA towers still step once per mm of height
 - Flow YOLO modifiers still ±0.05 @ 0.01; Pass 2 still −9…0%
-- Bambu Studio Developer mode exposes retraction, Max Flow Rate, and VFA calibration while a Bambu printer is selected
+- Bambu Studio Developer mode exposes retraction, Max flowrate, and VFA calibration while a Bambu printer is selected
 
 ## Architecture
 
@@ -264,8 +265,11 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
   instead of risking a broken preset. (Candidate for a future "experimental" feature.)
 - Photos are stored and exported but not analyzed (AI photo evaluation is a designed-for,
   not-built v1 exclusion, like accounts, cloud sync, and printer control).
-- Bambu Studio Developer mode exposes retraction, Max Flow Rate, and VFA calibration while a Bambu printer is selected; external models remain fallback options
+- Bambu Studio Developer mode exposes retraction, Max flowrate, and VFA calibration while a Bambu printer is selected; external models remain fallback options
   rather than pretending.
+- Orca's built-in calibration tests always target filament slot 1 and expose no extruder picker,
+  so multi-tool printers need a manual filament reassignment — the wizard says so rather than
+  pretending the limitation isn't there.
 - Suggested ranges are conservative starting points, not guarantees — spool labels and
   datasheets always win.
 

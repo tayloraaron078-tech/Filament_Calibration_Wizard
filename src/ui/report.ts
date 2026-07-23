@@ -12,8 +12,8 @@ export async function copyFinalsToClipboard(p: CalibrationProject): Promise<void
   const f = p.finals;
   const lines = [
     `${p.filament.manufacturer} ${mat.label} ${p.filament.color} — calibrated ${p.calibrationDate}`,
-    f.nozzleTemp !== undefined ? `Nozzle temperature: ${f.nozzleTemp} °C` : null,
     f.firstLayerTemp !== undefined ? `First-layer temperature: ${f.firstLayerTemp} °C` : null,
+    f.nozzleTemp !== undefined ? `Nozzle temperature: ${f.nozzleTemp} °C` : null,
     f.highFlowTemp !== undefined ? `High-flow temperature: ${f.highFlowTemp} °C` : null,
     f.flowRatio !== undefined ? `Flow ratio: ${f.flowRatio}` : null,
     f.pressureAdvance !== undefined ? `Pressure advance: ${f.pressureAdvance}` : null,
@@ -61,8 +61,8 @@ export async function renderReport(root: HTMLElement, id: string): Promise<void>
     h('div', { class: 'card' },
       h('h2', { style: 'margin-top:0' }, 'Final values'),
       h('div', { class: 'table-scroll' }, h('table', { class: 'data' }, h('tbody', {},
-        p.finals.nozzleTemp !== undefined ? row('Nozzle temperature', `${p.finals.nozzleTemp} °C`) : null,
         p.finals.firstLayerTemp !== undefined ? row('First-layer temperature', `${p.finals.firstLayerTemp} °C`) : null,
+        p.finals.nozzleTemp !== undefined ? row('Nozzle temperature', `${p.finals.nozzleTemp} °C`) : null,
         p.finals.highFlowTemp !== undefined ? row('High-flow temperature', `${p.finals.highFlowTemp} °C`) : null,
         p.finals.flowRatio !== undefined ? row('Flow ratio', String(p.finals.flowRatio)) : null,
         p.finals.pressureAdvance !== undefined ? row('Pressure advance', String(p.finals.pressureAdvance)) : null,

@@ -31,17 +31,21 @@ export function buildPatchesFromProject(project: CalibrationProject): Calibrated
   const finals = project.finals;
   const done = (id: keyof typeof steps): boolean => steps[id]?.status === 'completed';
 
+  // First-layer temperature is emitted before the other-layers value so the
+  // review list matches the slicer's own field order (both Orca and Bambu put
+  // nozzle_temperature_initial_layer above nozzle_temperature on the Filament
+  // tab). Patch order has no effect on the generated preset itself.
   if (done('temperature') && finals.nozzleTemp !== undefined) {
-    out.push({
-      sourceKey: 'nozzleTemp', presetKey: 'nozzle_temperature',
-      label: 'Nozzle temperature', value: finals.nozzleTemp, unit: '°C'
-    });
     if (finals.firstLayerTemp !== undefined) {
       out.push({
         sourceKey: 'firstLayerTemp', presetKey: 'nozzle_temperature_initial_layer',
         label: 'First layer nozzle temperature', value: finals.firstLayerTemp, unit: '°C'
       });
     }
+    out.push({
+      sourceKey: 'nozzleTemp', presetKey: 'nozzle_temperature',
+      label: 'Nozzle temperature', value: finals.nozzleTemp, unit: '°C'
+    });
   }
   if ((done('flow-verify') || done('flow-pass2') || done('flow-pass1')) && finals.flowRatio !== undefined) {
     out.push({

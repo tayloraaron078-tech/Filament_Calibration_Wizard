@@ -190,8 +190,75 @@ describe('calibration definitions integrity', () => {
       ...(bambu.perTest['max-volumetric-speed']?.steps ?? []),
       ...(bambu.perTest['max-volumetric-speed']?.gotchas ?? [])
     ].join(' ');
-    expect(maxFlowText).toMatch(/Max Flow Rate/i);
+    expect(maxFlowText).toMatch(/Max flowrate/i);
     expect(maxFlowText).toMatch(/VFA/i);
+  });
+
+  // The two slicers use genuinely different labels for the same tests, and we
+  // shipped Bambu's paths under Orca (and vice versa) until a Discord report
+  // caught it. These pin the exact strings, verified 2026-07-23 against each
+  // slicer's menu-construction source and the installed binaries.
+  it('Orca menu paths use Orca\'s own labels, not Bambu\'s', () => {
+    const orca = getSlicerContent('orca', '2.4.x');
+    const path = (id: CalibrationId) => orca.perTest[id]?.menuPath ?? '';
+
+    // Orca names the entry after the setting: "Flow ratio", never "Flow rate".
+    for (const id of ['flow-pass1', 'flow-pass2', 'flow-verify'] as CalibrationId[]) {
+      expect(path(id), id).toMatch(/Flow ratio/);
+      expect(path(id), id).not.toMatch(/Flow rate/i);
+    }
+    // Orca 2.4 dropped the "test" suffix; "Retraction test" is Bambu's wording.
+    expect(path('retraction')).toMatch(/Calibration → Retraction$/);
+    // Max flowrate is top-level in Orca — there is no "More..." submenu at all.
+    expect(path('max-volumetric-speed')).toBe('Calibration → Max flowrate');
+    for (const id of DEFAULT_ORDER) {
+      expect(path(id), id).not.toMatch(/More\s*(\.\.\.|…)/);
+    }
+  });
+
+  it('Bambu menu paths use Bambu\'s own labels, not Orca\'s', () => {
+    const bambu = getSlicerContent('bambu', '1.7+');
+    const path = (id: CalibrationId) => bambu.perTest[id]?.menuPath ?? '';
+
+    // Bambu names the entry after the test: "Flow rate", with Coarse/Fine.
+    for (const id of ['flow-pass1', 'flow-pass2', 'flow-verify'] as CalibrationId[]) {
+      expect(path(id), id).toMatch(/Flow rate/);
+      expect(path(id), id).not.toMatch(/Flow ratio/);
+    }
+    expect(path('flow-pass1')).toMatch(/Coarse/);
+    expect(path('flow-pass2')).toMatch(/Fine/);
+    // Bambu kept "Retraction test", and files Max flowrate under "More...".
+    expect(path('retraction')).toMatch(/Retraction test/);
+    expect(path('max-volumetric-speed')).toMatch(/More\.\.\.\s*→\s*Max flowrate/);
+    // The Develop-mode menu entry is "Pressure advance"; Flow Dynamics is the
+    // machine's automatic wizard on the Calibration TAB, not a menu item.
+    expect(path('pressure-advance')).toMatch(/Pressure advance/);
+  });
+
+  it('temperature guidance lists first-layer temp before other-layers temp', () => {
+    // Both slicers put nozzle_temperature_initial_layer above
+    // nozzle_temperature on the Filament tab, so the wizard should hand the
+    // values over in that order rather than the other way round.
+    for (const slicer of ['orca', 'bambu'] as const) {
+      const field = getSlicerContent(slicer).perTest.temperature?.saveTo.field ?? '';
+      expect(field, slicer).toMatch(/First layer/i);
+      expect(field.indexOf('First layer'), slicer).toBeLessThan(field.indexOf('Other layers'));
+    }
+  });
+
+  it('Orca built-in tests explain the Resonance avoidance transfer dialog', () => {
+    // Orca forces resonance_avoidance = false in every calib_* function, which
+    // surfaces an unsaved-changes dialog for the one stock profile that ships
+    // it enabled (Snapmaker U1 0.4 nozzle).
+    const orca = getSlicerContent('orca', '2.4.x');
+    const builtIn: CalibrationId[] = [
+      'temperature', 'flow-pass1', 'flow-pass2', 'pressure-advance',
+      'flow-verify', 'retraction', 'max-volumetric-speed'
+    ];
+    for (const id of builtIn) {
+      const gotchas = (orca.perTest[id]?.gotchas ?? []).join(' ');
+      expect(gotchas, id).toMatch(/Resonance avoidance/i);
+    }
   });
 
 });
