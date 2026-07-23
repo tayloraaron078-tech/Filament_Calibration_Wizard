@@ -271,7 +271,7 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
 
 <img width="1103" height="833" alt="Auto Results" src="https://github.com/user-attachments/assets/fa9ebd12-6d73-42b2-8d50-2e8a2825b278" />
 
-## Looking Ahead (Planned for v1.4.0)
+## Looking Ahead (Planned for the Next Feature Release)
 
 Version 1.4.0 is already in active development and aims to significantly streamline the calibration workflow. The goal is a guided, session-based experience that automatically prepares each calibration test, carries results forward between steps, and reduces manual setup so you can focus on printing instead of configuring. Stay tuned over the coming weeks as this next major update takes shape.
 
