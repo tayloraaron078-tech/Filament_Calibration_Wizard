@@ -269,6 +269,15 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
 - Suggested ranges are conservative starting points, not guarantees — spool labels and
   datasheets always win.
 
+### Troubleshooting
+
+- **Linux: blank window on launch (Wayland).** If the app opens to an empty window and, when
+  launched from a terminal, prints `Could not create default EGL display: EGL_BAD_PARAMETER`,
+  start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1` set — for example
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PerfectFit_1.3.0_amd64.appimage`. WebKitGTK's DMABUF
+  renderer fails to initialise EGL on some Wayland setups; this makes it fall back to a working
+  path. Fixed automatically in 1.4.0 and later.
+
 <img width="1103" height="833" alt="Auto Results" src="https://github.com/user-attachments/assets/fa9ebd12-6d73-42b2-8d50-2e8a2825b278" />
 
 ## Looking Ahead (Planned for the Next Feature Release)
