@@ -66,6 +66,16 @@ jobs:
 
             A correctness patch, driven almost entirely by one very thorough community report. Thanks to **Guntram** on the Discord, who ran the full procedure against OrcaSlicer 2.4.2 and documented every place our instructions did not match what is actually on screen — and to **RThomasHyde** for the Linux AppImage report.
 
+            ## ⚖️ PerfectFit is now licensed under AGPL-3.0
+
+            Starting with this release, PerfectFit moves from its old custom non-commercial license (R3D-NC v1.0) to the **GNU Affero General Public License v3** — the same license as OrcaSlicer, PrusaSlicer, and Slic3r.
+
+            **For most people this is a loosening, not a restriction.** The old license banned commercial use entirely; AGPL-3.0 permits it. You may now use, modify, sell, or host PerfectFit freely. The one obligation: if you distribute a modified version — or run one as a network service — you must make your source available under the same license.
+
+            The reason is compatibility. PerfectFit is built around the Orca-family slicers, and upcoming releases will integrate with them far more directly. AGPL section 7 forbids adding restrictions like "non-commercial" to a work that combines AGPL code, so the old license was a dead end for that roadmap.
+
+            Releases up to and including 1.3.0 remain available under their original terms.
+
             ## Highlights
 
             - **Slicer menu paths corrected in both directions.** Orca and Bambu Studio name the same tests differently, and several paths had drifted onto the wrong slicer's wording. Orca is `Calibration → Flow ratio`, `Calibration → Retraction`, and `Calibration → Max flowrate` at the top level; Bambu Studio is `Calibration → Flow rate → Coarse/Fine`, `Retraction test`, and `More... → Max flowrate`. The Bambu pressure advance path pointed at a menu entry that does not exist and now distinguishes the manual `Pressure advance` test from the machine's automatic Flow Dynamics wizard.
