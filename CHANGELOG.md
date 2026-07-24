@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Workbook cleanup for the 23 entries flagged by the new plausibility ranges** (printer database `dataRevision` 3). Twenty-two were placeholder zeros in "Max Print Speed", which the generator already stored as "not specified" — blanking them changes nothing in the generated data, it just stops the warnings. The twenty-third was a genuine error: a printer listed at 300 mm³/s of volumetric flow, roughly ten times what any hotend can manage, now corrected to 15. Owners of that printer will be offered the updated spec by the refresh prompt; nobody else sees a change.
+
 ## 1.3.2 - 2026-07-24
 
 Follow-up to 1.3.1, which was tagged but superseded before publication — **1.3.2 contains everything in 1.3.1 plus the items below**, so upgrading from 1.3.0 gets the lot.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "dataRevision": 2,
+  "dataRevision": 3,
   "source": "Printer_Database/Printer_Database.xlsx",
   "sheet": "Printer Specifications",
   "printerCount": 379,
@@ -5542,7 +5542,7 @@
       "maxBedTempC": null,
       "maxChamberTempC": null,
       "heatedChamber": false,
-      "maxVolumetricFlowMm3s": null,
+      "maxVolumetricFlowMm3s": 15,
       "defaultNozzleDiameterMm": 1.2,
       "supportedNozzleDiametersMm": [
         1.2,

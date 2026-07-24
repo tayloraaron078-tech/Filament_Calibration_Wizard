@@ -35,7 +35,16 @@ const SCHEMA_VERSION = 1;
 //   1 — initial release (1.3.0)
 //   2 — 1.3.2: corrected the blank-cell parser bug that corrupted 374 of 379
 //       printers, plus a spreadsheet revision with updated specs.
-const DATA_REVISION = 2;
+//   3 — workbook cleanup of the 23 entries the new plausibility ranges flagged.
+//       Mostly placeholder zeros blanked (no change to the generated output),
+//       plus one real correction: a max volumetric flow of 300 mm³/s — about
+//       ten times any real hotend — replaced with 15.
+//
+// Bump this in the SAME commit as any workbook change that alters the
+// generated JSON. A published release pins its dataRevision to the exact data
+// it shipped, so reusing a number for different data breaks the contract the
+// refresh prompt relies on.
+const DATA_REVISION = 3;
 
 const CHECK_MODE = process.argv.includes('--check');
 
