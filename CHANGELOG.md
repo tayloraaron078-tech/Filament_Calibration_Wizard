@@ -19,6 +19,7 @@ A correctness patch. Thanks to **Guntram** on the community Discord, who ran the
 
 ### Changed
 
+- **License changed to GNU AGPL-3.0.** PerfectFit previously used a custom non-commercial license (R3D-NC v1.0). OrcaSlicer, PrusaSlicer, and Slic3r are all AGPL-3.0, and a non-commercial restriction cannot legally be added to a work combining AGPL code — so the old license would have blocked any deeper slicer integration. AGPL-3.0 keeps the project compatible with the ecosystem it is built on and guarantees it stays open: anyone may use, modify, sell, or host PerfectFit, but derivative works must remain open source under the same terms, including when offered over a network. Copyright is held by Aaron Taylor. Releases up to and including 1.3.0 remain available under their original terms.
 - **Slicer menu documentation rewritten around the differences.** `docs/RESEARCH.md` now carries a side-by-side table of the labels each slicer uses, the full menu order for both, and the Orca calibration behaviours discovered while verifying this release (forced resonance-avoidance, slot-1 targeting, nozzle-diameter scaling, and the fact that system presets save to a "- Copy" rather than being overwritten).
 - **Regression tests pin the exact menu strings per slicer**, so an Orca path can no longer silently acquire Bambu's wording (or vice versa) — that class of drift now fails CI instead of reaching a user.
 

@@ -278,9 +278,9 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
 - **Linux: blank window on launch (Wayland).** If the app opens to an empty window and, when
   launched from a terminal, prints `Could not create default EGL display: EGL_BAD_PARAMETER`,
   start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1` set — for example
-  `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PerfectFit_1.3.0_amd64.appimage`. WebKitGTK's DMABUF
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PerfectFit_1.3.1_amd64.appimage`. WebKitGTK's DMABUF
   renderer fails to initialise EGL on some Wayland setups; this makes it fall back to a working
-  path. Fixed automatically in 1.4.0 and later.
+  path. Fixed automatically in 1.3.1 and later.
 
 <img width="1103" height="833" alt="Auto Results" src="https://github.com/user-attachments/assets/fa9ebd12-6d73-42b2-8d50-2e8a2825b278" />
 
@@ -293,3 +293,26 @@ Version 1.4.0 is already in active development and aims to significantly streaml
 AI-assisted photo evaluation (storage schema already reserves an `analysis` field), photo
 comparison, multiple nozzles/printers per filament, printer API integration, experimental
 slicer preset export, community preset sharing, filament inventory with drying/spool tracking.
+
+## License
+
+Copyright (C) 2026 Aaron Taylor
+
+PerfectFit is free software: you can redistribute it and/or modify it under the terms of the
+**GNU Affero General Public License, version 3** as published by the Free Software Foundation.
+The full text is in [License](License).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY —
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU Affero General Public License for more details.
+
+**Why AGPL-3.0:** PerfectFit is built around the Orca-family slicers, and OrcaSlicer, PrusaSlicer,
+and Slic3r are all AGPL-3.0. Matching that license keeps the project compatible with the ecosystem
+it depends on — particularly as future releases integrate more deeply with the slicers themselves —
+and guarantees the work stays open: anyone may use, modify, sell, or host PerfectFit, but
+derivative works must remain open source under the same terms, including when offered over a
+network.
+
+Prior to version 1.3.1 the project used a custom non-commercial license (R3D-NC v1.0). That license
+was incompatible with AGPL-3.0 code and has been retired. Releases up to and including 1.3.0 remain
+available under their original terms.
