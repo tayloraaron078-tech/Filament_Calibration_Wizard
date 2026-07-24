@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **AMS and MMU printers now get the filament-slot warning too.** The multi-tool warning added in 1.3.2 was gated on `extruderCount > 1`, which missed every single-extruder machine with multiple filament slots — 12 printers in the database, including the X1 Carbon, P1S, A1, and MK4S. They have exactly the same problem: Orca assigns the calibration plate to filament slot 1 regardless of whether that slot is a separate toolhead or an AMS bay. The check now also fires when the printer records AMS/MMU compatibility, and the wording covers both cases. Ordinary single-filament printers still show nothing.
+
 ### Changed
 
 - **Workbook cleanup for the 23 entries flagged by the new plausibility ranges** (printer database `dataRevision` 3). Twenty-two were placeholder zeros in "Max Print Speed", which the generator already stored as "not specified" — blanking them changes nothing in the generated data, it just stops the warnings. The twenty-third was a genuine error: a printer listed at 300 mm³/s of volumetric flow, roughly ten times what any hotend can manage, now corrected to 15. Owners of that printer will be offered the updated spec by the refresh prompt; nobody else sees a change.
