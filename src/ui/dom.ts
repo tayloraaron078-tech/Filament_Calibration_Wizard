@@ -71,7 +71,10 @@ export function confirmDialog(opts: { title: string; body: string; confirmLabel?
     const overlay = h('div', { class: 'modal-overlay', onClick: (e: Event) => { if (e.target === overlay) close(false); } },
       h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title },
         h('h3', {}, opts.title),
-        h('p', {}, opts.body),
+        // pre-line so callers can lay out lists with \n — the spec-refresh
+        // dialog shows one change per line, which is unreadable as a run-on
+        // paragraph. Wrapping still applies to long single lines.
+        h('p', { style: 'white-space:pre-line' }, opts.body),
         h('div', { class: 'modal-actions' },
           h('button', { class: 'btn', onClick: () => close(false) }, 'Cancel'),
           h('button', {

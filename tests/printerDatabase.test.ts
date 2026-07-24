@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 // The generator is plain ESM (Node built-ins only); vitest imports it directly.
 import {
-  buildDatabase, slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet
+  buildDatabase, slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet, num
 } from '../scripts/generate-printer-database.mjs';
 import {
-  allPrinterSpecs, getPrinterSpec, groupedPrinterSpecs, profileValuesFromSpec, specLabel
+  allPrinterSpecs, getPrinterSpec, groupedPrinterSpecs, profileValuesFromSpec, specLabel,
+  isSpecRefreshAvailable, specChangesForProfile, refreshProfileFromDatabase, PRINTER_DB_DATA_REVISION
 } from '../src/data/printerDatabase';
 import { migrate } from '../src/export/backup';
 import { validateAgainstPrinter } from '../src/logic/validation';
@@ -245,5 +246,77 @@ describe('worksheet cell parsing', () => {
     const row = parseSheet(xml, shared).find(r => r.rowIndex === 2)!;
     expect(row.cells.A).toBeUndefined();
     expect(row.cells.B).toBe('300');
+  });
+});
+
+describe('implausible-value guardrails', () => {
+  // The 1.3.0 database shipped 250 printers with a max nozzle temp of 27 or
+  // 69 C. --check could not catch it: the JSON faithfully matched the workbook,
+  // which is exactly why a plausibility floor is needed on top of it.
+  it('rejects physically impossible values and explains which cell to fix', () => {
+    expect(num('27', 5, 'Max Nozzle Temp', 'maxNozzleTempC')).toBe(null);
+    expect(num('69', 5, 'Max Nozzle Temp', 'maxNozzleTempC')).toBe(null);
+    expect(num('300', 5, 'Max Nozzle Temp', 'maxNozzleTempC')).toBe(300);
+    expect(num('300', 5, 'Max Volumetric Flow', 'maxVolumetricFlowMm3s')).toBe(null);
+    expect(num('24', 5, 'Max Volumetric Flow', 'maxVolumetricFlowMm3s')).toBe(24);
+  });
+
+  it('leaves unranged fields and blanks alone', () => {
+    expect(num('', 5, 'Anything')).toBe(null);
+    expect(num('99999', 5, 'Unranged field')).toBe(99999);
+  });
+
+  it('keeps zero where zero is meaningful (an unheated bed or chamber)', () => {
+    expect(num('0', 5, 'Max Bed Temp', 'maxBedTempC')).toBe(0);
+    expect(num('0', 5, 'Max Chamber Temp', 'maxChamberTempC')).toBe(0);
+    // ...but not where it is meaningless.
+    expect(num('0', 5, 'Max Print Speed', 'maxPrintSpeedMmS')).toBe(null);
+  });
+
+  it('ships a database with no impossible nozzle temperatures', () => {
+    const bad = allPrinterSpecs().filter(p => p.maxNozzleTempC != null && p.maxNozzleTempC < 150);
+    expect(bad).toEqual([]);
+  });
+});
+
+describe('refreshing saved profiles after a database correction', () => {
+  const spec = getPrinterSpec('bambu-lab-x1-carbon')!;
+  const stale: PrinterProfile = {
+    ...(profileValuesFromSpec(spec) as PrinterProfile),
+    id: 'saved-1', name: 'My X1C', nozzleDiameter: 0.4,
+    retractionRange: { start: 0, end: 2 }, notes: 'hardened nozzle',
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    maxNozzleTemp: 27,              // the 1.3.0 corruption
+    databaseDataRevision: undefined  // profiles saved before 1.3.2 carry none
+  };
+
+  it('offers a refresh for profiles filled from an older database revision', () => {
+    expect(isSpecRefreshAvailable(stale)).toBe(true);
+    // A profile already on the current revision is left alone.
+    expect(isSpecRefreshAvailable({ ...stale, databaseDataRevision: PRINTER_DB_DATA_REVISION })).toBe(false);
+    // Manual printers were never database-filled, so there is nothing to refresh.
+    expect(isSpecRefreshAvailable({ ...stale, isManual: true, databasePrinterId: null })).toBe(false);
+  });
+
+  it('reports the differing fields with before/after values', () => {
+    const changes = specChangesForProfile(stale);
+    const nozzle = changes.find(c => c.key === 'maxNozzleTemp')!;
+    expect(nozzle.from).toBe('27 °C');
+    expect(nozzle.to).toBe('300 °C');
+  });
+
+  it('refreshes specs while preserving identity and user-owned fields', () => {
+    const fresh = refreshProfileFromDatabase(stale);
+    expect(fresh.maxNozzleTemp).toBe(300);
+    expect(fresh.databaseDataRevision).toBe(PRINTER_DB_DATA_REVISION);
+    // Identity preserved so projects referencing this printer stay linked.
+    expect(fresh.id).toBe('saved-1');
+    // User-owned fields untouched.
+    expect(fresh.name).toBe('My X1C');
+    expect(fresh.notes).toBe('hardened nozzle');
+    expect(fresh.retractionRange).toEqual({ start: 0, end: 2 });
+    expect(fresh.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    // Nothing left to offer afterwards.
+    expect(isSpecRefreshAvailable(fresh)).toBe(false);
   });
 });

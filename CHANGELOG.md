@@ -1,6 +1,23 @@
 # Changelog
 
-## 1.3.1 - 2026-07-23
+## 1.3.2 - 2026-07-24
+
+Follow-up to 1.3.1, which was tagged but superseded before publication — **1.3.2 contains everything in 1.3.1 plus the items below**, so upgrading from 1.3.0 gets the lot.
+
+Where 1.3.1 fixed the corrupted printer database, this release makes sure the correction actually reaches printers you already saved, and makes the same class of bug impossible to ship silently again.
+
+### Added
+
+- **Saved printers can now be refreshed when the database is corrected.** Specs are copied into a printer profile when you add it, so fixing `printers.json` did nothing for printers already on your machine — 1.3.1 could only ask people to redo them by hand. The database now carries a `dataRevision`, profiles record the revision they were filled from, and the Printers page shows a **"↻ Updated specs available"** callout on any profile that is behind. Reviewing it lists every change as `Max nozzle temp: 27 °C → 300 °C` before anything is written.
+
+  Refreshing **keeps the profile id**, so projects referencing that printer stay linked, and preserves your printer name, notes, and retraction range. This is deliberately a review step, not a silent migration: the app does not track which fields you hand-tuned for modified hardware, so it shows the diff and asks rather than overwriting your values. Profiles saved before this release carry no revision and are treated as revision 1 — which is exactly the corrupted 1.3.0 data, so they are all offered the fix. Imported backups from 1.3.0 get the same treatment.
+- **The generator rejects physically impossible values.** `npm run validate:printers` only ever checked that `printers.json` matched the workbook — and it faithfully did, which is why 250 printers with a 27 °C maximum nozzle temperature sailed through. Numeric specs are now range-checked at generation time (nozzle 150–600 °C, bed 0–200 °C, flow 0.5–200 mm³/s, and so on); anything outside its range is stored as "not specified" and reported with the row number. Zero is still preserved where it is meaningful, such as an unheated bed or chamber. Running it against the current workbook surfaces 23 real data problems, including a printer listed at 300 mm³/s of volumetric flow — roughly ten times any real hotend, and almost certainly a print speed in the wrong column.
+
+### Fixed
+
+- **Multi-line confirmation dialogs render as lines again.** Dialog text collapsed newlines into a run-on paragraph, which made the spec-refresh diff unreadable at eleven changes. Dialog bodies now honour line breaks.
+
+## 1.3.1 - 2026-07-23 (superseded by 1.3.2, not published)
 
 A correctness patch. Thanks to **Guntram** on the community Discord, who ran the whole procedure against OrcaSlicer 2.4.2 and reported, in detail, four places where our slicer instructions did not match what is actually on screen — plus a dialog and a multi-tool problem neither of us understood at the time. Every menu path in the app has since been re-verified against each slicer's own menu-construction source and cross-checked against installed binaries.
 

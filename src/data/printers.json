@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "dataRevision": 2,
   "source": "Printer_Database/Printer_Database.xlsx",
   "sheet": "Printer Specifications",
   "printerCount": 379,
@@ -3334,7 +3335,7 @@
         "y": 175,
         "z": 165
       },
-      "maxPrintSpeedMmS": 7000,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 7000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -5541,7 +5542,7 @@
       "maxBedTempC": null,
       "maxChamberTempC": null,
       "heatedChamber": false,
-      "maxVolumetricFlowMm3s": 300,
+      "maxVolumetricFlowMm3s": null,
       "defaultNozzleDiameterMm": 1.2,
       "supportedNozzleDiametersMm": [
         1.2,
@@ -9971,7 +9972,7 @@
         "y": 420,
         "z": 420
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10001,7 +10002,7 @@
         "y": 420,
         "z": 400
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 2,
@@ -10031,7 +10032,7 @@
         "y": 420,
         "z": 420
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10061,7 +10062,7 @@
         "y": 420,
         "z": 420
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10091,7 +10092,7 @@
         "y": 650,
         "z": 650
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10121,7 +10122,7 @@
         "y": 650,
         "z": 630
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 2,
@@ -10153,7 +10154,7 @@
         "y": 650,
         "z": 650
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10183,7 +10184,7 @@
         "y": 650,
         "z": 650
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10213,7 +10214,7 @@
         "y": 300,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10243,7 +10244,7 @@
         "y": 300,
         "z": 280
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 2,
@@ -10273,7 +10274,7 @@
         "y": 300,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10303,7 +10304,7 @@
         "y": 300,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10333,7 +10334,7 @@
         "y": 200,
         "z": 220
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10363,7 +10364,7 @@
         "y": 200,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10393,7 +10394,7 @@
         "y": 200,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10423,7 +10424,7 @@
         "y": 200,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4000,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10453,7 +10454,7 @@
         "y": 200,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10483,7 +10484,7 @@
         "y": 200,
         "z": 310
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,
@@ -10513,7 +10514,7 @@
         "y": 200,
         "z": 310
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4500,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10543,7 +10544,7 @@
         "y": 200,
         "z": 310
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 4000,
       "firmware": "Klipper",
       "extruderCount": 1,
@@ -10573,7 +10574,7 @@
         "y": 200,
         "z": 300
       },
-      "maxPrintSpeedMmS": 0,
+      "maxPrintSpeedMmS": null,
       "maxAccelerationMmS2": 2000,
       "firmware": "Marlin",
       "extruderCount": 1,

@@ -65,6 +65,12 @@ export interface PrinterProfile {
   databasePrinterId?: string | null;
   /** printers.json schemaVersion this profile was populated from. */
   databaseSchemaVersion?: number;
+  /**
+   * printers.json dataRevision this profile was populated from. When the
+   * shipped database is newer, the Printers page offers to refresh the specs.
+   * Missing on profiles saved before 1.3.2 — treated as revision 1.
+   */
+  databaseDataRevision?: number;
   /** True when entered by hand (not matched to a database record). */
   isManual?: boolean;
 }
@@ -102,6 +108,13 @@ export interface PrinterSpecification {
 /** Shape of src/data/printers.json. */
 export interface PrinterDatabase {
   schemaVersion: number;
+  /**
+   * Bumped when the DATA changes in a way saved profiles should pick up, even
+   * though the shape (schemaVersion) is unchanged. Profiles record the revision
+   * they were filled from, so the app can offer to refresh stale specs.
+   * Absent in databases generated before 1.3.2 — treat as revision 1.
+   */
+  dataRevision?: number;
   source: string;
   sheet: string;
   printerCount: number;

@@ -2,7 +2,8 @@ import { h, clear, field, numberInput, issueList, confirmDialog, toast } from '.
 import { listPrinters, savePrinter, deletePrinter, listProjects, uid } from '../storage/store';
 import { validateNumber } from '../logic/validation';
 import {
-  groupedPrinterSpecs, getPrinterSpec, specLabel, profileValuesFromSpec, PRINTER_DB_COUNT
+  groupedPrinterSpecs, getPrinterSpec, specLabel, profileValuesFromSpec, PRINTER_DB_COUNT,
+  isSpecRefreshAvailable, specChangesForProfile, refreshProfileFromDatabase
 } from '../data/printerDatabase';
 import type { PrinterProfile, ExtruderType, PrinterSpecification } from '../types';
 
@@ -38,6 +39,7 @@ export async function renderPrinters(root: HTMLElement): Promise<void> {
         ? h('p', { class: 'field-help', style: 'color:var(--ok)' }, '✓ Specs from printer database')
         : h('p', { class: 'field-help' }, '✎ Manually configured'),
       p.notes ? h('p', { class: 'field-help' }, p.notes) : null,
+      refreshCallout(root, p),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn-sm', onClick: () => openEditor(root, p) }, '✎ Edit'),
         h('button', {
@@ -126,6 +128,45 @@ function printerCombobox(onSelect: (spec: PrinterSpecification) => void): { root
   input.addEventListener('blur', () => setTimeout(close, 150));
 
   return { root: wrap, input };
+}
+
+// --- refreshing specs after a database correction ---------------------------
+
+/**
+ * Offer to re-apply database specs when the shipped database has been revised
+ * since this profile was filled. Shows the exact before/after per field and
+ * only writes on confirmation — the app doesn't know which values a user
+ * hand-tuned for modified hardware, so it must not overwrite silently.
+ *
+ * Refreshing keeps the profile id, so projects referencing this printer stay
+ * linked. (Deleting and re-adding would mint a new id and orphan them.)
+ */
+function refreshCallout(root: HTMLElement, p: PrinterProfile): HTMLElement | null {
+  if (!isSpecRefreshAvailable(p)) return null;
+  // The database moved on, but this particular printer's values may be
+  // unaffected — say nothing unless something actually differs. Recomputed per
+  // render rather than written back, so rendering stays side-effect free.
+  const changes = specChangesForProfile(p);
+  if (!changes.length) return null;
+  return h('div', { class: 'callout callout-warn' },
+    h('p', { class: 'co-title' }, '↻ Updated specs available for this printer'),
+    h('p', {}, `The printer database has been corrected since these specs were saved. ${changes.length} value${changes.length === 1 ? '' : 's'} differ${changes.length === 1 ? 's' : ''} from the current data.`),
+    h('button', {
+      class: 'btn btn-sm btn-primary', onClick: async () => {
+        const ok = await confirmDialog({
+          title: `Refresh specs for ${p.name}?`,
+          body: 'These values will be replaced with the current database data. Your printer name, notes, and retraction range are kept, and projects using this printer stay linked.\n\n'
+            + changes.map(c => `• ${c.label}: ${c.from} → ${c.to}`).join('\n')
+            + '\n\nAnything you changed by hand for modified hardware will be overwritten — cancel and edit the fields directly if you\'d rather keep your own values.',
+          confirmLabel: 'Refresh specs'
+        });
+        if (!ok) return;
+        await savePrinter(refreshProfileFromDatabase(p));
+        toast(`Specs refreshed for ${p.name}.`, 'success');
+        clear(root); await renderPrinters(root);
+      }
+    }, 'Review and refresh')
+  );
 }
 
 // --- editor ----------------------------------------------------------------

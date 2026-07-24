@@ -28,6 +28,15 @@ const OUT_PATH = join(REPO_ROOT, 'src', 'data', 'printers.json');
 const SHEET_NAME = 'Printer Specifications';
 const SCHEMA_VERSION = 1;
 
+// Bumped whenever the DATA changes in a way saved printer profiles should pick
+// up, even though the shape (SCHEMA_VERSION) is unchanged. The app compares a
+// profile's stored revision against this and offers to refresh stale specs.
+//
+//   1 — initial release (1.3.0)
+//   2 — 1.3.2: corrected the blank-cell parser bug that corrupted 374 of 379
+//       printers, plus a spreadsheet revision with updated specs.
+const DATA_REVISION = 2;
+
 const CHECK_MODE = process.argv.includes('--check');
 
 // --- minimal ZIP reader ----------------------------------------------------
@@ -206,11 +215,48 @@ const COLUMNS = {
 const warnings = [];
 function warn(rowIndex, message) { warnings.push({ row: rowIndex, message }); }
 
-function num(raw, rowIndex, label) {
+/**
+ * Physically plausible ranges for numeric specs. A value outside its range is
+ * almost certainly a data-entry slip or a parsing fault, never a real machine —
+ * so it is rejected (stored as null, i.e. "not specified") and reported.
+ *
+ * This exists because the 1.3.0 database shipped 250 printers with a max nozzle
+ * temperature of 27 or 69 °C: a blank-cell parser bug was storing shared-string
+ * indices as numbers. Nothing caught it, because --check only verified that the
+ * JSON matched the workbook — and it faithfully did. Rejecting impossible
+ * values turns that class of fault into loud warnings at generation time
+ * instead of a silent, shipped regression.
+ */
+const RANGES = {
+  maxNozzleTempC: { min: 150, max: 600, label: 'Max Nozzle Temp' },
+  maxBedTempC: { min: 0, max: 200, label: 'Max Bed Temp' },
+  maxChamberTempC: { min: 0, max: 150, label: 'Max Chamber Temp' },
+  maxVolumetricFlowMm3s: { min: 0.5, max: 200, label: 'Max Volumetric Flow' },
+  defaultNozzleDiameterMm: { min: 0.05, max: 3, label: 'Default Nozzle Diameter' },
+  buildVolumeX: { min: 1, max: 3000, label: 'Build Volume X' },
+  buildVolumeY: { min: 1, max: 3000, label: 'Build Volume Y' },
+  buildVolumeZ: { min: 1, max: 3000, label: 'Build Volume Z' },
+  maxPrintSpeedMmS: { min: 1, max: 2000, label: 'Max Print Speed' },
+  maxAccelerationMmS2: { min: 1, max: 200000, label: 'Max Acceleration' },
+  extruderCount: { min: 1, max: 16, label: 'Number of Extruders' },
+  releaseYear: { min: 1980, max: 2100, label: 'Release Year' }
+};
+
+/**
+ * Read a numeric cell. `field` opts into the plausibility check above; omit it
+ * for values with no meaningful range. Returns null for blank, unparseable, or
+ * out-of-range input so downstream code treats it as "not specified".
+ */
+function num(raw, rowIndex, label, field) {
   if (raw === undefined || raw === '') return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) {
     warn(rowIndex, `${label}: "${raw}" is not a number — stored as null.`);
+    return null;
+  }
+  const range = field ? RANGES[field] : undefined;
+  if (range && (n < range.min || n > range.max)) {
+    warn(rowIndex, `${label}: ${n} is outside the plausible range ${range.min}–${range.max} — stored as null. Check this cell in the workbook.`);
     return null;
   }
   return n;
@@ -337,9 +383,9 @@ export function buildDatabase(rawRows) {
     const id = count === 0 ? baseId : `${baseId}-${count + 1}`;
 
     const supported = parseNozzleList(get('K'), rowIndex);
-    const bx = num(get('L'), rowIndex, 'Build Volume X');
-    const by = num(get('M'), rowIndex, 'Build Volume Y');
-    const bz = num(get('N'), rowIndex, 'Build Volume Z');
+    const bx = num(get('L'), rowIndex, 'Build Volume X', 'buildVolumeX');
+    const by = num(get('M'), rowIndex, 'Build Volume Y', 'buildVolumeY');
+    const bz = num(get('N'), rowIndex, 'Build Volume Z', 'buildVolumeZ');
 
     const spec = {
       id,
@@ -347,20 +393,20 @@ export function buildDatabase(rawRows) {
       model,
       technology: str(get('C')),
       extruderType: normalizeExtruder(get('D')),
-      maxNozzleTempC: num(get('E'), rowIndex, 'Max Nozzle Temp'),
-      maxBedTempC: num(get('F'), rowIndex, 'Max Bed Temp'),
-      maxChamberTempC: num(get('G'), rowIndex, 'Max Chamber Temp'),
+      maxNozzleTempC: num(get('E'), rowIndex, 'Max Nozzle Temp', 'maxNozzleTempC'),
+      maxBedTempC: num(get('F'), rowIndex, 'Max Bed Temp', 'maxBedTempC'),
+      maxChamberTempC: num(get('G'), rowIndex, 'Max Chamber Temp', 'maxChamberTempC'),
       heatedChamber: boolYesNo(get('H'), rowIndex),
-      maxVolumetricFlowMm3s: num(get('I'), rowIndex, 'Max Volumetric Flow'),
-      defaultNozzleDiameterMm: num(get('J'), rowIndex, 'Default Nozzle Diameter'),
+      maxVolumetricFlowMm3s: num(get('I'), rowIndex, 'Max Volumetric Flow', 'maxVolumetricFlowMm3s'),
+      defaultNozzleDiameterMm: num(get('J'), rowIndex, 'Default Nozzle Diameter', 'defaultNozzleDiameterMm'),
       supportedNozzleDiametersMm: supported,
       buildVolumeMm: { x: bx, y: by, z: bz },
-      maxPrintSpeedMmS: num(get('O'), rowIndex, 'Max Print Speed'),
-      maxAccelerationMmS2: num(get('P'), rowIndex, 'Max Acceleration'),
+      maxPrintSpeedMmS: num(get('O'), rowIndex, 'Max Print Speed', 'maxPrintSpeedMmS'),
+      maxAccelerationMmS2: num(get('P'), rowIndex, 'Max Acceleration', 'maxAccelerationMmS2'),
       firmware: str(get('Q')),
-      extruderCount: num(get('R'), rowIndex, 'Number of Extruders'),
+      extruderCount: num(get('R'), rowIndex, 'Number of Extruders', 'extruderCount'),
       multiMaterialCompatibility: str(get('S')),
-      releaseYear: num(get('T'), rowIndex, 'Release Year'),
+      releaseYear: num(get('T'), rowIndex, 'Release Year', 'releaseYear'),
       profileSource: str(get('U')),
       sourceFile: str(get('V')),
       notes: str(get('W'))
@@ -382,6 +428,7 @@ export function buildDatabase(rawRows) {
   // churn and make the build nondeterministic. schemaVersion + counts suffice.
   const data = {
     schemaVersion: SCHEMA_VERSION,
+    dataRevision: DATA_REVISION,
     source: 'Printer_Database/Printer_Database.xlsx',
     sheet: SHEET_NAME,
     printerCount: printers.length,
@@ -394,7 +441,7 @@ export function buildDatabase(rawRows) {
 }
 
 // Exported for tests.
-export { slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet, SCHEMA_VERSION };
+export { slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet, num, SCHEMA_VERSION, DATA_REVISION };
 
 // --- main ------------------------------------------------------------------
 

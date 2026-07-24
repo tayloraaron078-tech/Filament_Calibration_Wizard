@@ -15,6 +15,8 @@ import type {
 const db = raw as PrinterDatabase;
 
 export const PRINTER_DB_SCHEMA_VERSION = db.schemaVersion;
+/** Databases generated before 1.3.2 carry no dataRevision — they are revision 1. */
+export const PRINTER_DB_DATA_REVISION = db.dataRevision ?? 1;
 export const PRINTER_DB_COUNT = db.printerCount;
 
 /** All specs, ordered by manufacturer then model (as generated). */
@@ -88,6 +90,7 @@ export function profileValuesFromSpec(spec: PrinterSpecification): Partial<Print
     extruderType: mapExtruder(spec.extruderType),
     databasePrinterId: spec.id,
     databaseSchemaVersion: db.schemaVersion,
+    databaseDataRevision: PRINTER_DB_DATA_REVISION,
     isManual: false
   };
   const maxNozzle = n(spec.maxNozzleTempC);
@@ -118,4 +121,96 @@ export function profileValuesFromSpec(spec: PrinterSpecification): Partial<Print
   if (year !== undefined) out.releaseYear = year;
 
   return out;
+}
+
+// --- refreshing saved profiles when the database is corrected ---------------
+
+/** Human labels for the profile fields the database can supply. */
+const REFRESHABLE_FIELDS: { key: keyof PrinterProfile; label: string; unit?: string }[] = [
+  { key: 'maxNozzleTemp', label: 'Max nozzle temp', unit: '°C' },
+  { key: 'maxBedTemp', label: 'Max bed temp', unit: '°C' },
+  { key: 'maxChamberTemp', label: 'Max chamber temp', unit: '°C' },
+  { key: 'heatedChamber', label: 'Heated chamber' },
+  { key: 'maxVolumetricFlow', label: 'Max volumetric flow', unit: 'mm³/s' },
+  { key: 'nozzleDiameter', label: 'Nozzle diameter', unit: 'mm' },
+  { key: 'supportedNozzleDiameters', label: 'Supported nozzle sizes', unit: 'mm' },
+  { key: 'buildVolume', label: 'Build volume', unit: 'mm' },
+  { key: 'maxPrintSpeed', label: 'Max print speed', unit: 'mm/s' },
+  { key: 'maxAcceleration', label: 'Max acceleration', unit: 'mm/s²' },
+  { key: 'firmware', label: 'Firmware' },
+  { key: 'extruderCount', label: 'Number of extruders' },
+  { key: 'multiMaterialCompatibility', label: 'Multi-material' },
+  { key: 'extruderType', label: 'Extruder type' },
+  { key: 'releaseYear', label: 'Release year' }
+];
+
+export interface SpecChange {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+}
+
+function display(v: unknown, unit?: string): string {
+  if (v === undefined || v === null) return 'not specified';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (Array.isArray(v)) return v.length ? `${v.join(', ')}${unit ? ` ${unit}` : ''}` : 'not specified';
+  if (typeof v === 'object') {
+    const b = v as { x?: number; y?: number; z?: number };
+    const parts = [b.x, b.y, b.z].filter(x => x !== undefined && x !== null);
+    return parts.length ? `${parts.join(' × ')}${unit ? ` ${unit}` : ''}` : 'not specified';
+  }
+  return `${String(v)}${unit ? ` ${unit}` : ''}`;
+}
+
+/**
+ * True when this profile came from the database and the shipped database has
+ * been revised since. Profiles saved before 1.3.2 carry no revision, so they
+ * are treated as revision 1 — which is exactly the corrupted 1.3.0 data.
+ */
+export function isSpecRefreshAvailable(profile: PrinterProfile): boolean {
+  if (!profile.databasePrinterId || profile.isManual) return false;
+  if (!getPrinterSpec(profile.databasePrinterId)) return false;
+  return (profile.databaseDataRevision ?? 1) < PRINTER_DB_DATA_REVISION;
+}
+
+/**
+ * Fields where the saved profile differs from the current database record.
+ *
+ * Deliberately a REVIEW step rather than a silent migration: the app does not
+ * track which fields a user hand-tuned for modified hardware, so overwriting
+ * without showing the change could quietly discard a correct custom value.
+ */
+export function specChangesForProfile(profile: PrinterProfile): SpecChange[] {
+  const spec = getPrinterSpec(profile.databasePrinterId);
+  if (!spec) return [];
+  const next = profileValuesFromSpec(spec);
+  const changes: SpecChange[] = [];
+  for (const { key, label, unit } of REFRESHABLE_FIELDS) {
+    if (!(key in next)) continue;                     // database doesn't know it
+    const from = profile[key], to = next[key];
+    if (JSON.stringify(from) === JSON.stringify(to)) continue;
+    changes.push({ key: String(key), label, from: display(from, unit), to: display(to, unit) });
+  }
+  return changes;
+}
+
+/**
+ * A copy of `profile` with database-supplied fields refreshed and the revision
+ * stamped. Name, notes, retraction range and every other user-owned field are
+ * preserved, as is the profile id — so projects referencing it stay linked.
+ */
+export function refreshProfileFromDatabase(profile: PrinterProfile): PrinterProfile {
+  const spec = getPrinterSpec(profile.databasePrinterId);
+  if (!spec) return profile;
+  return {
+    ...profile,
+    ...profileValuesFromSpec(spec),
+    id: profile.id,
+    name: profile.name,
+    notes: profile.notes,
+    retractionRange: { ...profile.retractionRange },
+    createdAt: profile.createdAt,
+    updatedAt: new Date().toISOString()
+  };
 }
