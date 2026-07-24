@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 // The generator is plain ESM (Node built-ins only); vitest imports it directly.
 import {
-  buildDatabase, slugify, parseNozzleList, boolYesNo, normalizeExtruder
+  buildDatabase, slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet
 } from '../scripts/generate-printer-database.mjs';
 import {
   allPrinterSpecs, getPrinterSpec, groupedPrinterSpecs, profileValuesFromSpec, specLabel
@@ -199,5 +199,51 @@ describe('safe-limit validation against printer specs', () => {
   it('warns (not errors) when MVS exceeds the rated flow', () => {
     const issues = validateAgainstPrinter('mvs', 30, printer);
     expect(issues.some(i => i.level === 'warning')).toBe(true);
+  });
+});
+
+describe('worksheet cell parsing', () => {
+  // Regression: a blank cell is written by Excel as a self-closing <c .../>.
+  // The original pattern tried `<c\b([^>]*)>...</c>` first, and `[^>]*` ate the
+  // trailing `/`, so a blank cell was parsed as an opening tag whose body ran
+  // on to the NEXT cell's </c>. That stole the following cell's <v>, and since
+  // the borrowed attributes carry no t="s", a shared-string INDEX was stored as
+  // a number — blank "Max Nozzle Temp" cells became values like 27 and 69,
+  // which then clamped calibration ranges and hard-blocked real temperatures.
+  const shared = ['Afinia', 'Afinia H+1(HS)', 'FFF', 'Direct Drive', 'No'];
+
+  function rowXml(cells: string): string {
+    return `<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Manufacturer</t></is></c></row>` +
+      `<row r="2">${cells}</row></sheetData>`;
+  }
+
+  it('treats a self-closing cell as blank without stealing the next cell', () => {
+    const xml = rowXml(
+      '<c r="A2" s="2" t="s"><v>0</v></c>' +
+      '<c r="B2" s="2" t="s"><v>1</v></c>' +
+      '<c r="C2" s="2" t="s"><v>2</v></c>' +
+      '<c r="D2" s="2" t="s"><v>3</v></c>' +
+      '<c r="E2" s="2"/>' +          // blank Max Nozzle Temp
+      '<c r="F2" s="2"/>' +          // blank Max Bed Temp
+      '<c r="G2" s="2"/>' +          // blank Max Chamber Temp
+      '<c r="H2" s="2" t="s"><v>4</v></c>'   // Heated Chamber = "No"
+    );
+    const rows = parseSheet(xml, shared);
+    const row = rows.find(r => r.rowIndex === 2)!;
+
+    expect(row.cells.D).toBe('Direct Drive');
+    // The three blanks must be absent — never 4 (the shared-string index of H2).
+    expect(row.cells.E).toBeUndefined();
+    expect(row.cells.F).toBeUndefined();
+    expect(row.cells.G).toBeUndefined();
+    // ...and H must resolve through the shared-string table, not as a raw index.
+    expect(row.cells.H).toBe('No');
+  });
+
+  it('still reads numeric and shared-string cells that follow a blank', () => {
+    const xml = rowXml('<c r="A2" s="2"/><c r="B2" s="2"><v>300</v></c>');
+    const row = parseSheet(xml, shared).find(r => r.rowIndex === 2)!;
+    expect(row.cells.A).toBeUndefined();
+    expect(row.cells.B).toBe('300');
   });
 });

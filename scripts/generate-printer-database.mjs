@@ -138,10 +138,18 @@ function parseSheet(xml, shared) {
   while ((rm = rowRe.exec(xml))) {
     const rowIndex = Number(rm[1]);
     const cells = {};
-    const cRe = /<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/g;
+    // Self-closing cells (`<c r="E2" s="2"/>`, i.e. a blank cell) MUST be
+    // recognised as such. An earlier pattern alternated `<c\b([^>]*)>...</c>`
+    // first, and `[^>]*` happily consumed the trailing `/` — so a blank cell
+    // was read as an opening tag whose body ran on to the NEXT cell's `</c>`.
+    // That stole the following cell's <v> and, because the borrowed attributes
+    // carry no `t="s"`, stored a shared-string INDEX as if it were a number.
+    // Blank Max Nozzle Temp cells thus became values like 27 or 69. Matching
+    // `/>` before `>` in one alternation keeps the two cases distinct.
+    const cRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
     let cm;
     while ((cm = cRe.exec(rm[2]))) {
-      const attrs = cm[1] ?? cm[3] ?? '';
+      const attrs = cm[1] ?? '';
       const body = cm[2] ?? '';
       const refM = /\br="([A-Z]+\d+)"/.exec(attrs);
       if (!refM) continue;
@@ -386,7 +394,7 @@ export function buildDatabase(rawRows) {
 }
 
 // Exported for tests.
-export { slugify, parseNozzleList, boolYesNo, normalizeExtruder, SCHEMA_VERSION };
+export { slugify, parseNozzleList, boolYesNo, normalizeExtruder, parseSheet, SCHEMA_VERSION };
 
 // --- main ------------------------------------------------------------------
 
