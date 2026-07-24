@@ -14,6 +14,9 @@ declare module '*generate-printer-database.mjs' {
   }
 
   export function buildDatabase(rawRows: RawRow[]): BuildResult;
+  /** Parse worksheet XML into raw rows. Exported so tests can pin cell-level
+   *  parsing (notably self-closing/blank cells) without a real .xlsx fixture. */
+  export function parseSheet(xml: string, shared: string[]): RawRow[];
   export function slugify(s: string): string;
   export function parseNozzleList(raw: string, rowIndex: number): number[];
   export function boolYesNo(raw: string, rowIndex: number): boolean | null;

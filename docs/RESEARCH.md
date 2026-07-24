@@ -52,14 +52,56 @@ flow before PA judgment) is preserved and the difference is disclosed in each mo
 
 ## Menu locations (version assumptions)
 
-- **Orca Slicer 2.4.x**: top menu bar → `Calibration` → Temperature / Flow rate (YOLO, Pass 1, Pass 2) /
-  Pressure advance (Line, Pattern, Tower) / Retraction test / More… → Max flowrate.
+Re-verified 2026-07-23 against each slicer's menu-construction source (`MainFrame.cpp`) and
+cross-checked against the installed binaries, after a community report that several paths were
+wrong. **The two slicers use different labels for the same tests — never copy a path across.**
+
+- **Orca Slicer 2.4.x**: top menu bar → `Calibration`, whose entries are, in order:
+  Temperature / **Max flowrate** / Pressure advance (Line, Pattern, Tower) / **Flow ratio**
+  (YOLO Recommended, YOLO Perfectionist, Pass 1 Coarse, Pass 2 Fine) / **Retraction** /
+  Cornering / Input Shaping ▸ / VFA / Calibration Guide. There is no `More…` submenu.
   Values saved in Filament settings (Flow ratio, PA, temps, MVS) or Printer settings → Extruder → Retraction.
   After calibrating, start a new project to exit calibration mode.
-- **Bambu Studio 1.7+**: `Calibration` tab → Temperature / Flow Rate (coarse/fine) / Flow Dynamics (K).
-  Developer mode exposes manual calibration tests with Bambu printers selected, including retraction, Max Flow Rate, and VFA; external models/calculators remain fallbacks.
+- **Bambu Studio 1.7+**: two distinct surfaces, easily confused.
+  The `Calibration` **tab** in the main tab bar holds the machine's automatic wizards
+  (Flow Dynamics / Flow Rate / Vibration) for Bambu printers.
+  Develop Mode adds a `Calibration` **menu** to the title bar with the manual Orca-derived
+  tests: Temperature / **Flow rate** ▸ (Coarse, Fine) / **Pressure advance** / **Retraction test** /
+  **More...** ▸ (Max flowrate, VFA) / Tutorial. Note there is no `Flow Dynamics` entry in
+  that menu — the manual PA test is called `Pressure advance`.
+  External models/calculators remain fallbacks when Develop Mode is unavailable.
   On Bambu printers, disable machine-side "Flow Calibration" / "Flow Dynamics Calibration"
   checkboxes when printing manual tests.
+
+**Naming differences to keep straight** (each of these bit us once):
+
+| Test | Orca 2.4.x | Bambu Studio |
+| --- | --- | --- |
+| Flow | `Flow ratio` (named after the setting) | `Flow rate` ▸ Coarse / Fine |
+| Retraction | `Retraction` | `Retraction test` |
+| Max flow | `Max flowrate`, top level (2nd entry) | `More...` ▸ `Max flowrate` |
+| Pressure advance | `Pressure advance` | `Pressure advance` (menu); `Flow Dynamics` is the tab wizard |
+
+## Orca calibration behaviours worth knowing
+
+- **Resonance avoidance is force-disabled.** Every `calib_*` function in `Plater.cpp` sets
+  `resonance_avoidance = false` unconditionally — it slows outer walls and would distort results.
+  Of Orca's entire stock profile catalog, exactly one machine preset ships it enabled
+  (`Snapmaker U1 (0.4 nozzle)`; all other U1 nozzle variants inherit `fdm_U1` → `fdm_toolchanger`,
+  neither of which sets the key, so they fall through to the built-in default of `false`).
+  Those users get an unsaved-changes dialog offering Transfer/Discard. Confirmed by testing both:
+  the choice is irrelevant, because `new_project()` runs *before* the forced `false`, so Orca
+  overwrites the outcome either way.
+- **Calibration tests always target filament slot 1.** Each `calib_*` function reads
+  `params.extruder_id`, which is initialised to `0` and never set by any calibration dialog —
+  none of them expose an extruder picker. Multi-tool users must either load the filament under
+  test into slot 1 or reassign every object's filament by hand after the plate is generated.
+- **Tests scale to the preset's nozzle diameter.** The model is scaled by `nozzle_diameter ÷ 0.4`
+  and layer height set to `nozzle_diameter ÷ 2`, so running a test against the wrong nozzle
+  variant of a printer preset silently invalidates the result.
+- **System presets cannot be overwritten.** `SavePresetDialog.cpp` formats the save name as
+  `"<name> - Copy"` whenever `is_system` is true, so Save during a calibration creates a user
+  copy rather than corrupting the stock preset.
 
 ## Version-dependence strategy
 

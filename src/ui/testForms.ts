@@ -173,13 +173,17 @@ const temperatureController: TestController = {
   compute(ctx, settings, result) {
     const normal = num(result.normalTemp);
     const computed: Record<string, number | string> = { normalTemp: normal };
-    const enterInSlicer = [{ label: 'Nozzle temperature (other layers)', value: `${normal} °C` }];
+    // Listed first-layer-first to match both slicers' Filament tab, which puts
+    // "First layer" above "Other layers" in the Nozzle line — entering them in
+    // screen order avoids mis-typing one into the other's box.
+    const enterInSlicer: { label: string; value: string }[] = [];
     const finalsPatch: ComputeOutput['finalsPatch'] = { nozzleTemp: normal };
     if (result.firstLayerTemp !== '' && result.firstLayerTemp !== undefined) {
       computed.firstLayerTemp = num(result.firstLayerTemp);
       finalsPatch.firstLayerTemp = num(result.firstLayerTemp);
       enterInSlicer.push({ label: 'Nozzle temperature (first layer)', value: `${result.firstLayerTemp} °C` });
     }
+    enterInSlicer.push({ label: 'Nozzle temperature (other layers)', value: `${normal} °C` });
     if (result.highFlowTemp !== '' && result.highFlowTemp !== undefined) {
       computed.highFlowTemp = num(result.highFlowTemp);
       finalsPatch.highFlowTemp = num(result.highFlowTemp);

@@ -1,10 +1,20 @@
 import type { SlicerId, SlicerVersionContent } from '../types';
 
 const BAMBU_DEVELOPER_MODE_BEST_PATH =
-  'Best path for Bambu printers: enable Developer mode first — Bambu Studio → Preferences → check the box labeled "Develop Mode" (yes, it really says "Develop Mode", not "Developer Mode" — a translation quirk). Once enabled, a Calibration button appears in the TITLE BAR next to the Redo (↷) arrow — the same Calibration menu all Orca-based slicers have, just with slightly different entries. The manual calibration tests (Temperature, Flow Rate coarse/fine — no YOLO, Pressure Advance / Flow Dynamics, Retraction, Max Flow Rate, and VFA) all live in that title-bar menu, and your Bambu printer stays selected the whole time.';
+  'Best path for Bambu printers: enable Developer mode first — Bambu Studio → Preferences → check the box labeled "Develop Mode" (yes, it really says "Develop Mode", not "Developer Mode" — a translation quirk). Once enabled, a Calibration button appears in the TITLE BAR next to the Redo (↷) arrow — the same Calibration menu all Orca-based slicers have, just with slightly different entries. The manual calibration tests all live in that title-bar menu, and your Bambu printer stays selected the whole time. The entries, in order, are: Temperature, Flow rate (Coarse / Fine — no YOLO), Pressure advance, Retraction test, More... (Max flowrate, VFA), and Tutorial.';
 
 const BAMBU_NON_BAMBU_FALLBACK =
   'Fallback only: if you cannot or do not want to use Developer mode, temporarily select any non–Bambu-Lab printer profile to reveal the same Calibration tests, create/run the test, then switch back to your Bambu printer before saving values or doing normal prints.';
+
+/**
+ * Orca disables Resonance avoidance for EVERY calibration test — verified in
+ * Plater.cpp, where each calib_* function sets `resonance_avoidance = false`
+ * unconditionally. Of Orca's entire stock profile catalog, exactly one machine
+ * preset ships it enabled (Snapmaker U1 0.4 nozzle), so only those users ever
+ * see the resulting dialog. Reported by Guntram on the community Discord.
+ */
+const ORCA_RESONANCE_AVOIDANCE_NOTE =
+  'If a "Creating a new project: unsaved changes" dialog appears listing "Resonance avoidance" (true → false), that is Orca\'s own doing, not a mistake on your part: every Orca calibration test deliberately turns Resonance avoidance off, because it slows outer walls and would distort the result. Transfer or Discard — it makes no difference here, since Orca creates the project first and forces the setting off immediately afterwards either way. Almost nobody sees this dialog: the Snapmaker U1 (0.4 nozzle) is the only stock Orca machine preset that ships with Resonance avoidance enabled.';
 
 /**
  * Version-aware slicer instruction content.
@@ -12,6 +22,22 @@ const BAMBU_NON_BAMBU_FALLBACK =
  * All wording is original. Facts (menu locations, defaults, formulas) verified
  * against the official OrcaSlicer wiki (github.com/SoftFever/OrcaSlicer wiki,
  * checked 2026-07-18 against the v2.4.x docs) and the Bambu Lab wiki.
+ *
+ * Menu labels re-verified 2026-07-23 against each slicer's menu-construction
+ * source (MainFrame.cpp) and cross-checked against the installed binaries,
+ * after a Discord report that several paths were wrong. The two slicers use
+ * genuinely different labels for the same tests, so keep them straight:
+ *
+ *   Orca   Calibration: Temperature | Max flowrate | Pressure advance |
+ *                       Flow ratio | Retraction | Cornering |
+ *                       Input Shaping > | VFA | Calibration Guide
+ *   Bambu  Calibration: Temperature | Flow rate > (Coarse, Fine) |
+ *                       Pressure advance | Retraction test |
+ *                       More... > (Max flowrate, VFA) | Tutorial
+ *
+ * Notably: Orca says "Flow ratio" where Bambu says "Flow rate"; Orca dropped
+ * the "test" from "Retraction test"; and Max flowrate is top-level in Orca but
+ * lives under "More..." in Bambu. Do not copy a path from one to the other.
  *
  * To support a new slicer version: copy an entry, adjust, and add it to
  * SLICER_CONTENT. Nothing else in the app needs to change.
@@ -22,7 +48,7 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
     slicer: 'orca',
     slicerLabel: 'Orca Slicer',
     version: '2.4.x',
-    verifiedOn: '2026-07-18',
+    verifiedOn: '2026-07-23',
     docsUrl: 'https://github.com/SoftFever/OrcaSlicer/wiki/Calibration',
     calibrationMenuPath: 'Top menu bar → Calibration',
     perTest: {
@@ -40,23 +66,24 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
         ],
         saveTo: {
           path: 'Filament settings (edit the filament profile) → Filament tab',
-          field: 'Nozzle temperature — set "Other layers" to your chosen temp; optionally set "First layer" 5–10 °C hotter for adhesion',
+          field: 'Nozzle temperature — the fields appear in this order: "First layer" (optionally 5–10 °C hotter for adhesion), then "Other layers" (your chosen temp)',
           scope: 'filament',
           note: 'Save with the floppy-disk icon as a NEW user preset (e.g. "Brand PETG Blue - X1C - 0.4") — do not overwrite the stock generic preset.'
         },
         gotchas: [
           'The tower is generated in-slicer — you do not need to download a model.',
-          'If every block looks bad, the problem is likely wet filament or a partial clog, not temperature.'
+          'If every block looks bad, the problem is likely wet filament or a partial clog, not temperature.',
+          ORCA_RESONANCE_AVOIDANCE_NOTE
         ]
       },
       'flow-pass1': {
         available: true, builtIn: true,
-        menuPath: 'Calibration → Flow rate',
+        menuPath: 'Calibration → Flow ratio',
         steps: [
           'Select the printer AND the filament profile you are calibrating — the test math builds on the profile\'s current flow ratio, so the right filament must be active.',
           'Note the profile\'s current Flow ratio (Filament settings → Filament tab) — the app asks for it below.',
-          'Open Calibration → Flow rate. Choose "YOLO (Recommended)" for the one-pass method, or "Pass 1" for the legacy coarse pass.',
-          'YOLO: a plate of eleven blocks appears, each labeled with an absolute modifier from −0.05 to +0.05 in 0.01 steps. Pass 1: nine blocks labeled −20 to +20 in 5% steps.',
+          'Open Calibration → Flow ratio (Orca names the menu entry after the setting, not the test — Bambu Studio is the one that calls it "Flow rate"). Choose "YOLO (Recommended)" for the one-pass method, or "Pass 1 (Coarse)" for the legacy coarse pass.',
+          'YOLO: a plate of eleven blocks appears, each labeled with an absolute modifier from −0.05 to +0.05 in 0.01 steps. Pass 1 (Coarse): nine blocks labeled −20 to +20 in 5% steps.',
           'Slice and print the plate.',
           'Pick the best block using the evaluation guide, then let this app compute the new flow ratio.',
           'Bambu printers only: in the print dialog, UNCHECK the machine\'s own "Flow Calibration" option — it would recalibrate on top of the test.'
@@ -68,14 +95,17 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           note: 'Save the profile after entering the value; Pass 2 / YOLO verification builds on the SAVED value.'
         },
         disableFirst: ['Bambu printers: the "Flow Calibration" checkbox in the send-to-print dialog'],
-        gotchas: ['YOLO modifiers are absolute (+0.01), legacy Pass 1/2 modifiers are percentages (+5). Don\'t mix the two formulas — this app applies the right one for the method you pick.']
+        gotchas: [
+          'YOLO modifiers are absolute (+0.01), legacy Pass 1/2 modifiers are percentages (+5). Don\'t mix the two formulas — this app applies the right one for the method you pick.',
+          ORCA_RESONANCE_AVOIDANCE_NOTE
+        ]
       },
       'flow-pass2': {
         available: true, builtIn: true,
-        menuPath: 'Calibration → Flow rate → Pass 2',
+        menuPath: 'Calibration → Flow ratio → Pass 2 (Fine)',
         steps: [
           'FIRST verify the Pass 1 result is entered AND saved in the filament profile — Pass 2 builds on it.',
-          'Open Calibration → Flow rate and choose Pass 2.',
+          'Open Calibration → Flow ratio and choose "Pass 2 (Fine)".',
           'A plate of ten blocks appears with modifiers from −9 to 0 (percent, 1% steps).',
           'Slice and print, then pick the smoothest block.',
           'Enter the modifier below; the final ratio = saved ratio × (100 + modifier) / 100.'
@@ -85,7 +115,8 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'Flow ratio',
           scope: 'filament',
           note: 'Overwrite the Pass-1 value with this final one and save the user preset again.'
-        }
+        },
+        gotchas: [ORCA_RESONANCE_AVOIDANCE_NOTE]
       },
       'pressure-advance': {
         available: true, builtIn: true,
@@ -108,15 +139,16 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
         disableFirst: ['Bambu printers: "Flow Dynamics Calibration" checkbox in the print dialog'],
         gotchas: [
           'Tower: PA = start + step × best_height_mm (the tower steps PA once per mm of height).',
-          'Line/Pattern: values are printed next to the lines — read them directly rather than counting samples when possible.'
+          'Line/Pattern: values are printed next to the lines — read them directly rather than counting samples when possible.',
+          ORCA_RESONANCE_AVOIDANCE_NOTE
         ]
       },
       'flow-verify': {
         available: true, builtIn: true,
-        menuPath: 'Calibration → Flow rate → Pass 2',
+        menuPath: 'Calibration → Flow ratio → Pass 2 (Fine)',
         steps: [
           'Verify BOTH your calibrated flow ratio AND the new Pressure Advance value are saved in the filament profile — this re-check tests flow under the new PA.',
-          'Open Calibration → Flow rate and choose Pass 2 (the same fine plate as before: −9 to 0, 1% steps).',
+          'Open Calibration → Flow ratio and choose "Pass 2 (Fine)" (the same fine plate as before: −9 to 0, 1% steps).',
           'Slice and print.',
           'Pick the smoothest block. If the 0 block wins, your flow ratio is confirmed; a neighbor winning means PA was masking a small flow error.'
         ],
@@ -125,14 +157,15 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           field: 'Flow ratio',
           scope: 'filament',
           note: 'Only update the value if a block other than 0 won; then save the user preset again.'
-        }
+        },
+        gotchas: [ORCA_RESONANCE_AVOIDANCE_NOTE]
       },
       retraction: {
         available: true, builtIn: true,
-        menuPath: 'Calibration → Retraction test',
+        menuPath: 'Calibration → Retraction',
         steps: [
           'Select printer, filament, and process profile.',
-          'Open Calibration → Retraction test.',
+          'Open Calibration → Retraction (Orca 2.4 renamed this from "Retraction test"; "Retraction test" is Bambu Studio\'s wording).',
           'Set start / end / step. Defaults 0→2 mm step 0.1 suit direct drive; try 1→6 mm step 0.2 for Bowden.',
           'Slice and print the twin-tower test.',
           'Find the LOWEST height where the towers stay clean (strings stop).',
@@ -146,15 +179,16 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
         },
         gotchas: [
           'If the tower is clean from the very bottom, set a small nonzero value (0.2–0.4 mm direct drive) rather than 0.',
-          'If the top is STILL stringy, dry the filament and check the nozzle for leaks — more retraction won\'t fix moisture.'
+          'If the top is STILL stringy, dry the filament and check the nozzle for leaks — more retraction won\'t fix moisture.',
+          ORCA_RESONANCE_AVOIDANCE_NOTE
         ]
       },
       'max-volumetric-speed': {
         available: true, builtIn: true,
-        menuPath: 'Calibration → More… → Max flowrate',
+        menuPath: 'Calibration → Max flowrate',
         steps: [
           'Select printer, filament (with calibrated temperature saved), and process profile.',
-          'Open Calibration → More… and choose Max flowrate.',
+          'Open Calibration → Max flowrate — it sits at the TOP level of the Calibration menu, directly under Temperature. (Bambu Studio is the slicer that files it under "More...".)',
           'Set start / end / step (defaults 5→20 mm³/s, step 0.5 per mm of height are good unless you already know the ballpark).',
           'Slice and print the test tower.',
           'Watch and listen during the print — note the height where clicking or visible defects start.',
@@ -167,7 +201,10 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
           scope: 'filament',
           note: 'Enter the PRODUCTION value (with safety margin applied), not the raw measured maximum.'
         },
-        gotchas: ['This test measures a best-case scenario. The official guidance is to reduce the measured value by 10–20% for real prints — this app applies your configured margin automatically.']
+        gotchas: [
+          'This test measures a best-case scenario. The official guidance is to reduce the measured value by 10–20% for real prints — this app applies your configured margin automatically.',
+          ORCA_RESONANCE_AVOIDANCE_NOTE
+        ]
       },
       shrinkage: {
         available: true, builtIn: false,
@@ -212,7 +249,7 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
     slicer: 'bambu',
     slicerLabel: 'Bambu Studio',
     version: '1.7+',
-    verifiedOn: '2026-07-19',
+    verifiedOn: '2026-07-23',
     docsUrl: 'https://wiki.bambulab.com/en/software/bambu-studio/manual-calibration',
     // NOTE: In current Bambu Studio (verified 2.7.x), enabling Preferences →
     // "Develop Mode" (their label) adds a Calibration button to the title bar
@@ -235,7 +272,7 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
         ],
         saveTo: {
           path: 'Filament settings → Filament tab',
-          field: 'Nozzle temperature (Other layers; optionally First layer)',
+          field: 'Nozzle temperature — the fields appear in this order: "First layer" (optional, 5–10 °C hotter for adhesion), then "Other layers" (your chosen temp)',
           scope: 'filament',
           note: 'Save as a NEW user preset — avoid overwriting Bambu system presets (they reset on updates anyway).'
         },
@@ -247,11 +284,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-pass1': {
         available: true, builtIn: true,
-        menuPath: 'Title bar → Calibration → Flow Rate → Coarse (Pass 1)',
+        menuPath: 'Title bar → Calibration → Flow rate → Coarse',
         steps: [
           'Select the Bambu printer and the filament preset to calibrate (its current flow ratio is the baseline).',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu → Flow Rate and choose the coarse test (Pass 1). Manual mode prints blocks with modifiers around ±20% in 5% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
+          'Open the title-bar Calibration menu → Flow rate → Coarse (Bambu Studio labels the submenu entries simply "Coarse" and "Fine"; Orca calls the whole thing "Flow ratio" instead). Manual mode prints blocks with modifiers around ±20% in 5% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
           'X1/P1 with lidar also offer automatic flow calibration — this wizard covers the MANUAL path so you stay in control of the judgment.',
           'Slice and print; pick the smoothest block.',
           'New ratio = old × (100 + modifier) / 100 — computed for you below.'
@@ -269,11 +306,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-pass2': {
         available: true, builtIn: true,
-        menuPath: 'Title bar → Calibration → Flow Rate → Fine (Pass 2)',
+        menuPath: 'Title bar → Calibration → Flow rate → Fine',
         steps: [
           'Verify the coarse result is saved in the filament preset.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu → Flow Rate → fine calibration: blocks from −9% to 0% in 1% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
+          'Open the title-bar Calibration menu → Flow rate → Fine: blocks from −9% to 0% in 1% steps. Bambu Studio does not offer Orca\'s YOLO flow method.',
           'Slice, print, pick the best block; final ratio = saved ratio × (100 + modifier) / 100.'
         ],
         saveTo: {
@@ -289,11 +326,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'pressure-advance': {
         available: true, builtIn: true,
-        menuPath: 'Title bar → Calibration → Flow Dynamics',
+        menuPath: 'Title bar → Calibration → Pressure advance  (the machine\'s automatic version lives on the separate Calibration TAB → Flow Dynamics)',
         steps: [
-          'Bambu Studio calls Pressure Advance "Flow Dynamics Calibration"; the value is the K factor.',
+          'Bambu Studio calls Pressure Advance "Flow Dynamics Calibration"; the value is the K factor. Note that these are two different places in the UI: the manual test is "Pressure advance" in the Develop-mode title-bar Calibration MENU, while the machine\'s automatic Flow Dynamics wizard is on the "Calibration" TAB in the main tab bar. There is no "Flow Dynamics" entry in the title-bar menu.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu → Flow Dynamics. Choose Manual mode (lidar-equipped X1/P1 can run Automatic, but manual keeps you in control and works for every material).',
+          'Open the title-bar Calibration menu → Pressure advance for the manual test (lidar-equipped X1/P1 can instead run Automatic Flow Dynamics from the Calibration tab, but manual keeps you in control and works for every material).',
           'The manual test prints a series of labeled lines at increasing K values.',
           'Pick the line with the most uniform width — no bulges at speed changes, no thin breaks.',
           'Enter the K value in the result step; it is usually labeled directly on the plate.'
@@ -312,11 +349,11 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'flow-verify': {
         available: true, builtIn: true,
-        menuPath: 'Title bar → Calibration → Flow Rate → Fine (Pass 2)',
+        menuPath: 'Title bar → Calibration → Flow rate → Fine',
         steps: [
           'Verify BOTH your calibrated flow ratio AND the new K factor (Flow Dynamics) are saved — this re-check tests flow under the new pressure timing.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu → Flow Rate → fine calibration (−9% to 0%, 1% steps) — the same plate as the earlier fine pass.',
+          'Open the title-bar Calibration menu → Flow rate → Fine (−9% to 0%, 1% steps) — the same plate as the earlier fine pass.',
           'Slice, print, pick the smoothest block. The 0% block winning means your flow ratio is confirmed.'
         ],
         saveTo: {
@@ -333,7 +370,7 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
         steps: [
           'Select the Bambu printer, filament preset, and normal process profile.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu and choose the Retraction test.',
+          'Open the title-bar Calibration menu and choose "Retraction test" (Bambu Studio kept this name; Orca 2.4 shortened its own entry to just "Retraction").',
           'Run the generated stringing/retraction test, changing one variable at a time: distance first, then speed if needed.',
           'If Developer mode is not available, fall back to Orca Slicer or an external stringing test model and copy the resulting distance/speed into Bambu Studio.'
         ],
@@ -347,14 +384,14 @@ export const SLICER_CONTENT: SlicerVersionContent[] = [
       },
       'max-volumetric-speed': {
         available: true, builtIn: true,
-        menuPath: 'Title bar → Calibration → Max Flow Rate (Develop Mode)',
+        menuPath: 'Title bar → Calibration → More... → Max flowrate (Develop Mode)',
         steps: [
           'Select the Bambu printer and the filament preset with calibrated temperature and flow saved.',
           BAMBU_DEVELOPER_MODE_BEST_PATH,
-          'Open the title-bar Calibration menu and choose Max Flow Rate.',
+          'Open the title-bar Calibration menu, then the "More..." submenu, and choose Max flowrate. (This is where Bambu Studio and Orca genuinely differ: in Orca, Max flowrate is a top-level Calibration entry with no "More..." submenu at all.)',
           'Slice and print the generated max-flow test; note where surface quality, layer bonding, or extruder sounds first degrade.',
           'Use the last good flow as the raw result, then enter a conservative production value with safety margin in the filament preset.',
-          'Developer mode also exposes VFA calibration in Bambu Studio. PerfectFit does not currently score VFA as a separate wizard step, but you can run it from the same Calibration area when diagnosing speed-related ringing or vertical fine artifacts.'
+          'Developer mode also exposes VFA calibration in Bambu Studio, alongside Max flowrate in the same "More..." submenu. PerfectFit does not currently score VFA as a separate wizard step, but you can run it from there when diagnosing speed-related ringing or vertical fine artifacts.'
         ],
         saveTo: {
           path: 'Filament settings → Filament tab',

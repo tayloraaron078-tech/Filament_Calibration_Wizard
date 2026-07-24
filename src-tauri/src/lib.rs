@@ -23,8 +23,29 @@ fn purge_stale_webview_caches() {
 #[cfg(not(target_os = "windows"))]
 fn purge_stale_webview_caches() {}
 
+/// Work around a blank/empty window on some Linux setups (notably Wayland).
+/// WebKitGTK 2.42+ defaults to a DMABUF-based accelerated renderer that calls
+/// `eglGetPlatformDisplay`; when that fails it aborts with
+/// "Could not create default EGL display: EGL_BAD_PARAMETER" and the window
+/// renders nothing. This bites the bundled AppImage in particular, because it
+/// ships its own `libwayland-client` that can be incompatible with the host
+/// compositor. Disabling the DMABUF renderer makes WebKitGTK fall back to a
+/// path that avoids that EGL init entirely. Only set when the user hasn't
+/// expressed a preference, so an explicit override (or an `LD_PRELOAD` of the
+/// system libwayland) still wins.
+#[cfg(target_os = "linux")]
+fn configure_linux_webview_env() {
+  if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+  }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_webview_env() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  configure_linux_webview_env();
   purge_stale_webview_caches();
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
