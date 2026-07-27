@@ -5,10 +5,10 @@
 > across multiple stages. The feature is gated behind the
 > `automatedCalibration` experimental flag, which is **off** until the pipeline
 > is complete. The existing manual calibration workflow and the slicer-profile
-> installer are unaffected. **Stages 1-7 are complete** (session lifecycle,
+> installer are unaffected. **Stages 1-8 are complete** (session lifecycle,
 > workflow engine, asset registry, engine layer, project generation for all
-> three calibration-asset kinds, and the guided UX); Stages 8-10 remain before
-> release.
+> three calibration-asset kinds, the guided UX, and the finish handoff into the
+> profile generator/installer); Stages 9-10 remain before release.
 
 ## Goal
 
@@ -236,6 +236,41 @@ This repo's Vitest environment is `'node'`, so no `src/ui/*.ts` file has
 unit-test coverage by convention — this screen is verified by real
 click-through in a dev-server browser (with a faked Tauri bridge standing in
 for the desktop native layer) instead.
+
+### Finish & profile install (Stage 8)
+
+The automated pipeline finishes by handing off to the **existing, verified**
+slicer-profile generator/installer (`src/slicerIntegration/`, driven by
+[`src/ui/profileWizard.ts`](../src/ui/profileWizard.ts) at `#/profile/:id`) —
+it is **not** reimplemented for the automated path. This works because an
+automated session *is* a `CalibrationProject` (Stage 2), and recording each
+measured result writes `project.finals` — exactly the source the profile
+generator already reads (`buildPatchesFromProject`). The measured results, not
+any intermediate working-profile values, are what get baked into the exported
+or installed filament profile.
+
+- **From the automated screen** ([`src/ui/automatedCalibration.ts`](../src/ui/automatedCalibration.ts)):
+  once at least one calibrated value is recorded, a **"Finish calibration"**
+  card summarizes the recorded values and links into `#/profile/:id`. A
+  completed session's card links there too, so a finished session can still
+  (re)generate or re-install a profile.
+- **A deliberate "Mark session complete"** action (`completeSession`, with a
+  confirmation) closes the session. Completion is terminal but non-destructive:
+  recorded results and any generated profile are kept, and a new session can be
+  started later.
+- **From the profile wizard back to the session:** after a successful install
+  or export, if the project still has an open automated session, the result
+  stage offers "Back to automated session" and the same "Mark session complete"
+  close-out — so the loop closes from whichever screen the user finishes on.
+
+Nothing in Stage 8 changes the installer itself; it only wraps it. The
+installer's own guarantees hold unchanged — it backs up affected slicer files
+first, never edits vendor/system presets, and export always works even when a
+version isn't verified for direct install. Verified by real dev-server
+click-through (per the `src/ui/*.ts` convention above): the finish handoff, the
+`#/profile/:id` target loading, a full generate→export cycle surfacing the
+close-out, and the mark-complete transition persisting `sessionStatus:
+completed`.
 
 ### Relationship to existing code
 

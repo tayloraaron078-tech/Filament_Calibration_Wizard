@@ -27,6 +27,7 @@ import { slicerDisplayName, integrationIdsForProjectSlicer, findVerifiedVersion 
 import { loadExperimentalFeatures } from '../slicerIntegration/featureFlags';
 import { buildDiagnosticReport } from '../slicerIntegration/diagnostics';
 import { errorTemplate } from '../slicerIntegration/errors';
+import { completeSession, isAutomatedCalibrationEnabled } from '../automatedCalibration';
 
 type Stage = 'slicer' | 'profiles' | 'configure' | 'preview' | 'result';
 
@@ -680,6 +681,40 @@ async function persistRecord(
   await saveProject(project);
 }
 
+/** When this project has an automated calibration session still open (the user
+ *  reached here via the Stage 8 "Finish calibration" handoff), offer to return
+ *  to it or close it out now that a tuned profile has been installed/exported.
+ *  Returns null when there's no open session or the flag is off. */
+function automatedSessionCloseout(
+  project: CalibrationProject, rerender: () => void
+): HTMLElement | null {
+  const status = project.sessionStatus;
+  const open = isAutomatedCalibrationEnabled()
+    && status !== undefined
+    && status !== 'completed' && status !== 'cancelled' && status !== 'failed';
+  if (!open) return null;
+  return h('div', { class: 'card' },
+    h('h3', { style: 'margin-top:0' }, 'Automated calibration session'),
+    h('p', {}, 'This project has an automated calibration session in progress. Now that your tuned profile is ready, you can close it out.'),
+    h('div', { class: 'btn-row' },
+      h('a', { class: 'btn', href: `#/automated/${project.id}` }, '← Back to automated session'),
+      h('button', {
+        class: 'btn btn-primary', onClick: async () => {
+          const ok = await confirmDialog({
+            title: 'Mark this automated session complete?',
+            body: 'This closes the automated session. Your recorded results and this profile are kept — you can still create or re-install a profile afterward, and you can always start a new session later.',
+            confirmLabel: 'Mark complete'
+          });
+          if (!ok) return;
+          const res = completeSession(project);
+          if (!res.ok) { toast(res.reason ?? 'Could not complete the session.', 'error'); return; }
+          await saveProject(project);
+          toast('Automated session marked complete.', 'success');
+          rerender();
+        }
+      }, '✓ Mark automated session complete')));
+}
+
 function renderResultStage(
   root: HTMLElement, st: WizState, project: CalibrationProject, rerender: () => void
 ): void {
@@ -706,6 +741,8 @@ function renderResultStage(
         res.backupId ? h('button', { class: 'btn', onClick: () => bridge.openBackupDirectory(res.backupId!).catch(e => toast(String(e), 'error')) }, '🗄 View backup') : null,
         h('a', { class: 'btn', href: `#/report/${project.id}` }, '📄 View calibration report'))
     ));
+    const co = automatedSessionCloseout(project, rerender);
+    if (co) root.append(co);
     return;
   }
 
@@ -774,6 +811,12 @@ function renderResultStage(
 
   card.append(h('div', { class: 'btn-row', style: 'margin-top:.6rem' },
     h('button', { class: 'btn btn-ghost', onClick: () => { st.stage = 'preview'; rerender(); } }, '← Back to preview')));
+
+  // After a successful export, offer to close out an open automated session too.
+  if (st.exportedTo) {
+    const co = automatedSessionCloseout(project, rerender);
+    if (co) root.append(co);
+  }
 
   async function doInstall(allowReplace: boolean): Promise<void> {
     if (!st.installation || !st.location || !gen) return;
