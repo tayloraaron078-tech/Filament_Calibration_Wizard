@@ -93,6 +93,76 @@ pub fn parse_binary_stl(bytes: &[u8]) -> Result<Mesh, String> {
     Ok(Mesh { vertices, triangles })
 }
 
+/// Trim a mesh to everything at or below `zcut` (in the mesh's own coordinates),
+/// clipping triangles that straddle the plane so the walls stay closed at every
+/// layer. No top cap is added — each horizontal slice is still a closed loop from
+/// the walls, which is what the slicer needs. Used to size Orca's tall master
+/// temperature-tower STL down to `towerHeightMm(range)` (band-count × 10 mm),
+/// matching how Orca itself cuts it.
+pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
+    let mut vertices: Vec<[f64; 3]> = Vec::new();
+    let mut index: HashMap<(i64, i64, i64), usize> = HashMap::new();
+    let q = |f: f64| (f * 100_000.0).round() as i64;
+    let push = |v: [f64; 3], vertices: &mut Vec<[f64; 3]>, index: &mut HashMap<(i64, i64, i64), usize>| -> usize {
+        let key = (q(v[0]), q(v[1]), q(v[2]));
+        *index.entry(key).or_insert_with(|| {
+            vertices.push(v);
+            vertices.len() - 1
+        })
+    };
+    // Intersection of edge P→Q with the plane z = zcut.
+    let cross = |p: [f64; 3], qy: [f64; 3]| -> [f64; 3] {
+        let t = (zcut - p[2]) / (qy[2] - p[2]);
+        [p[0] + t * (qy[0] - p[0]), p[1] + t * (qy[1] - p[1]), zcut]
+    };
+
+    let mut triangles: Vec<[usize; 3]> = Vec::new();
+    for tri in &mesh.triangles {
+        let v = [mesh.vertices[tri[0]], mesh.vertices[tri[1]], mesh.vertices[tri[2]]];
+        let below = [v[0][2] <= zcut, v[1][2] <= zcut, v[2][2] <= zcut];
+        let nb = below.iter().filter(|&&b| b).count();
+        match nb {
+            3 => {
+                let a = push(v[0], &mut vertices, &mut index);
+                let b = push(v[1], &mut vertices, &mut index);
+                let c = push(v[2], &mut vertices, &mut index);
+                triangles.push([a, b, c]);
+            }
+            0 => {}
+            _ => {
+                // Rotate so the winding is preserved while handling the two cases
+                // by the index of the "odd one out".
+                let (i0, i1, i2) = (0usize, 1usize, 2usize);
+                let order = [i0, i1, i2];
+                if nb == 1 {
+                    // one below (A), two above (B,C): keep triangle A, P_ab, P_ac
+                    let a_pos = order.iter().position(|&k| below[k]).unwrap();
+                    let a = v[order[a_pos]];
+                    let b = v[order[(a_pos + 1) % 3]];
+                    let c = v[order[(a_pos + 2) % 3]];
+                    let ia = push(a, &mut vertices, &mut index);
+                    let iab = push(cross(a, b), &mut vertices, &mut index);
+                    let iac = push(cross(a, c), &mut vertices, &mut index);
+                    triangles.push([ia, iab, iac]);
+                } else {
+                    // two below (A,B), one above (C): keep quad A,B,P_bc,P_ac
+                    let c_pos = order.iter().position(|&k| !below[k]).unwrap();
+                    let c = v[order[c_pos]];
+                    let a = v[order[(c_pos + 1) % 3]];
+                    let b = v[order[(c_pos + 2) % 3]];
+                    let ia = push(a, &mut vertices, &mut index);
+                    let ib = push(b, &mut vertices, &mut index);
+                    let ibc = push(cross(b, c), &mut vertices, &mut index);
+                    let iac = push(cross(a, c), &mut vertices, &mut index);
+                    triangles.push([ia, ib, ibc]);
+                    triangles.push([ia, ibc, iac]);
+                }
+            }
+        }
+    }
+    Mesh { vertices, triangles }
+}
+
 /// Format an f64 compactly for 3mf XML (trim trailing zeros, avoid `-0`).
 fn num(f: f64) -> String {
     if f == 0.0 {
@@ -359,6 +429,21 @@ mod tests {
     }
 
     #[test]
+    fn cut_below_z_trims_and_clips() {
+        let mesh = parse_binary_stl(&cube_stl()).unwrap(); // 10mm cube, z 0..10
+        let cut = cut_below_z(&mesh, 5.0);
+        let (min, max) = cut.bounds();
+        assert_eq!(min[2], 0.0);
+        assert_eq!(max[2], 5.0, "top clipped to the plane");
+        // still spans the full footprint below the cut
+        assert_eq!(min[0], 0.0);
+        assert_eq!(max[0], 10.0);
+        assert!(!cut.triangles.is_empty());
+        // every vertex is at or below the cut plane
+        assert!(cut.vertices.iter().all(|v| v[2] <= 5.0 + 1e-9));
+    }
+
+    #[test]
     fn plate_center_parses_printable_area() {
         let cfg = r#"{"printable_area":["0x0","256x0","256x256","0x256"]}"#;
         assert_eq!(plate_center_from_config(cfg), (128.0, 128.0));
@@ -414,25 +499,35 @@ mod tests {
             eprintln!("SKIP: Orca / temp tower / donor not present");
             return;
         }
-        let mesh = parse_binary_stl(&std::fs::read(stl).unwrap()).unwrap();
-        let (min, max) = mesh.bounds();
+        let master = parse_binary_stl(&std::fs::read(stl).unwrap()).unwrap();
+        let (min0, max0) = master.bounds();
         println!(
-            "temp tower: {} tris, {} verts, bounds min={min:?} max={max:?}",
-            mesh.triangles.len(),
-            mesh.vertices.len()
+            "master tower: {} tris, {} verts, height {:.1}mm",
+            master.triangles.len(),
+            master.vertices.len(),
+            max0[2] - min0[2]
         );
+
+        // Cut the 370mm master to a 9-band, 90mm tower (230->190 step 5), as Orca
+        // does. Cut plane is 90mm above the model's own min-z.
+        let band_height = 10.0;
+        let bands = 9; // 230,225,...,190
+        let zcut = min0[2] + band_height * bands as f64;
+        let mesh = cut_below_z(&master, zcut);
+        let (_minc, maxc) = mesh.bounds();
+        println!("cut tower: {} tris, {} verts, height {:.1}mm", mesh.triangles.len(), mesh.vertices.len(), maxc[2] - _minc[2]);
 
         let cfg = read_project_config(donor.display().to_string()).unwrap();
 
-        // Temperature bands spread across the tower height (M104 at layer tops).
-        let height = max[2] - min[2];
+        // Per-band temperature changes (mirrors temperatureTower.ts): one M104 at
+        // each band boundary, in FINAL coords (assembler rests min-z at 0).
         let mut xml = String::from(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<custom_gcodes_per_layer>\n<plate>\n<plate_info id=\"1\"/>\n",
         );
         let mut want_temps = Vec::new();
-        for (i, frac) in [0.25f64, 0.5, 0.75].iter().enumerate() {
-            let z = ((height * frac) / 0.2).round() * 0.2; // snap to 0.2 layer
-            let temp = 240 - (i as i32 + 1) * 5;
+        for i in 1..bands {
+            let z = band_height * i as f64; // 10,20,...,80
+            let temp = 230 - 5 * i as i32; // 225,220,...,190
             want_temps.push(temp);
             xml.push_str(&format!(
                 "<layer top_z=\"{z}\" type=\"4\" extruder=\"-858993460\" color=\"\" extra=\"M104 S{temp}\"/>\n"
