@@ -14,9 +14,9 @@
 // engine only ever reports "not installed yet" until a managed build is staged.
 // ---------------------------------------------------------------------------
 
-import type { EngineDetectionResult } from '../types';
-import { type EngineNativeBridge, nativeEngineBridge } from '../engineBridge';
-import { splitRawDetection } from './engineSupport';
+import type { EngineNativeBridge } from '../engineBridge';
+import { nativeEngineBridge } from '../engineBridge';
+import type { EngineStatus } from '../engineRegistry';
 import { InstalledOrcaEngine } from './installedOrcaEngine';
 
 export class ManagedOrcaEngine extends InstalledOrcaEngine {
@@ -30,11 +30,11 @@ export class ManagedOrcaEngine extends InstalledOrcaEngine {
    * native code; pass a `cancellationToken` to allow cancelling the (large)
    * download via the engine's cancel path. Off-desktop this is not available.
    */
-  async install(cancellationToken?: string): Promise<EngineDetectionResult> {
+  async install(cancellationToken?: string): Promise<EngineStatus> {
     if (!this.bridge.isDesktop()) {
       throw new Error('NOT_DESKTOP: the managed engine can only be installed in the desktop app.');
     }
     const raw = this.remember(await this.bridge.downloadManagedOrca(cancellationToken));
-    return splitRawDetection(raw).detection;
+    return this.buildStatus(raw);
   }
 }

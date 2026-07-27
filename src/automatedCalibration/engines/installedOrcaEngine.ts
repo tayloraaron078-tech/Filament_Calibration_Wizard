@@ -156,13 +156,8 @@ export class InstalledOrcaEngine implements SlicingEngine {
     return raw.valid ? splitRawDetection(raw).capabilities : emptyEngineCapabilities();
   }
 
-  /** Combined status for the engine-status diagnostics view (one native call). */
-  async status(): Promise<EngineStatus> {
-    const raw = this.remember(
-      this.bridge.isDesktop()
-        ? await this.bridge.detectSlicingEngine(this.id)
-        : this.notDesktopRaw()
-    );
+  /** Shape an EngineStatus from a raw detection, tagged with this engine's id. */
+  protected buildStatus(raw: RawEngineDetection): EngineStatus {
     const { detection, validation, capabilities } = splitRawDetection(raw);
     return {
       engineId: this.id,
@@ -177,6 +172,16 @@ export class InstalledOrcaEngine implements SlicingEngine {
       warnings: validation.warnings,
       notes: detection.notes
     };
+  }
+
+  /** Combined status for the engine-status diagnostics view (one native call). */
+  async status(): Promise<EngineStatus> {
+    const raw = this.remember(
+      this.bridge.isDesktop()
+        ? await this.bridge.detectSlicingEngine(this.id)
+        : this.notDesktopRaw()
+    );
+    return this.buildStatus(raw);
   }
 
   // --- Stage 6 territory (project assembly) ---------------------------------

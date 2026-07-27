@@ -8,7 +8,11 @@
 > installer are unaffected. **Stages 1-8 are complete** (session lifecycle,
 > workflow engine, asset registry, engine layer, project generation for all
 > three calibration-asset kinds, the guided UX, and the finish handoff into the
-> profile generator/installer); Stages 9-10 remain before release.
+> profile generator/installer). **Stage 9 (managed Orca engine) is built for
+> Windows** — detection, download-on-demand acquisition, and the opt-in UX are
+> in place (Linux/macOS acquisition is a tracked follow-up). Stage 10
+> (hardening, compat matrix, beta prep) remains, and the third-party notices
+> need owner legal review before any public distribution.
 
 ## Goal
 
@@ -272,6 +276,53 @@ click-through (per the `src/ui/*.ts` convention above): the finish handoff, the
 close-out, and the mark-complete transition persisting `sessionStatus:
 completed`.
 
+### Managed Orca engine (Stage 9)
+
+The automated pipeline needs a slicing engine, but not every user has OrcaSlicer
+installed (many print only with Bambu Studio). So PerfectFit offers a
+**managed** OrcaSlicer alongside the user's own install:
+
+- **Path A — the user already has OrcaSlicer:** `InstalledOrcaEngine` detects
+  and drives it. Nothing is downloaded.
+- **Path B — no OrcaSlicer:** the user opts in and PerfectFit downloads a
+  **pinned** OrcaSlicer build on demand (`ManagedOrcaEngine`).
+- **Path C — the user doesn't want automation:** nothing is installed; the
+  manual workflow is untouched.
+
+The managed engine is the *same* OrcaSlicer, driven the same way — it just lives
+under PerfectFit's own root (`<app-data>/perfectfit/engines/managed-orca/`)
+instead of the user's Program Files. `ManagedOrcaEngine` **reuses the entire
+`InstalledOrcaEngine` implementation** (detection, preset resolution, project
+assembly, slicing), differing only in its engine id and where the native side
+looks for the executable. Every native command already keys off the engine id
+and resolves the executable/resources from that engine's tamper-evident
+manifest, so the whole slice pipeline works for the managed engine unchanged.
+`discoverEngines()` prefers an installed Orca, then the managed one, then the
+always-available manual-export fallback.
+
+**Download-on-demand acquisition.** The pinned build (version, URL, and
+**sha256**) lives in **native code**, so the frontend can never redirect the
+download. `download_managed_orca` streams the asset to a temp file while
+computing its SHA-256 in one pass, refuses to install on any checksum/size
+mismatch, extracts it (zip-slip-guarded) into the managed root, records the
+version, and re-detects to persist the manifest. The download is cancellable.
+No OrcaSlicer binary is ever committed to this repository or bundled in
+PerfectFit's own installer.
+
+**Opt-in + disclosure.** When no usable OrcaSlicer is detected, the automated
+screen offers *"Install OrcaSlicer for PerfectFit"* with a plain-language
+disclosure that this installs OrcaSlicer, a **separate** open-source program
+(AGPL-3.0), which PerfectFit drives via automation. Licensing/attribution is in
+[`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) — **draft, pending owner
+legal review before any public distribution.**
+
+**Platform scope.** Only the **Windows x64** build is pinned so far (the
+version the whole pipeline was verified against). Linux ships an AppImage whose
+`resources/` are packed inside a self-mounting squashfs rather than beside the
+executable, so it needs different handling (`--appimage-extract` or a
+special-cased validation) *and* verification on real Linux — a tracked
+follow-up. macOS is de-prioritized.
+
 ### Relationship to existing code
 
 The automated session **extends the existing `CalibrationProject`** — it is not a
@@ -286,17 +337,18 @@ live on the filesystem.
 
 The `sessions/<id>/jobs/<id>/{workspace,datadir,out}` layout below is
 implemented and in active use since Stage 5 (the process runner) and Stage 6
-(project assembly). Only `engines/managed-orca/` — a bundled/downloaded Orca
-binary — remains future work (Stage 9); today `InstalledOrcaEngine` only ever
-points at the user's own install, never a managed one. Everything lives under
-an application-managed root, isolated per session and per job:
+(project assembly). `engines/managed-orca/` is populated by the Stage 9
+download-on-demand acquisition when the user opts in. Everything lives under an
+application-managed root, isolated per session and per job:
 
 ```
 <app-data>/perfectfit/
   engines/
-    managed-orca/
-      manifest.json            # engine id, upstream version, checksum, capabilities
-      bin/…                    # the managed Orca executable (Stage 9)
+    managed_orca.json          # tamper-evident manifest (id, version, checksum, caps)
+    managed-orca/              # extracted portable Orca (Path B, opt-in)
+      orca-slicer.exe
+      resources/{calib,profiles}/…
+      version.txt
   sessions/
     <sessionId>/
       jobs/
@@ -306,9 +358,10 @@ an application-managed root, isolated per session and per job:
           out/                 # sliced artifacts (plate_1.gcode, …)
 ```
 
-No Orca executable is bundled in the repository. The managed engine is a
-separately-packaged component targeted for Stage 9 — see the note under
-"Staged delivery" on why it's required, not optional, for release.
+No Orca executable is committed to this repository or bundled in PerfectFit's
+own installer. The managed engine is downloaded on demand from the pinned
+upstream release only when the user opts in — see "Managed Orca engine
+(Stage 9)" above.
 
 ## Staged delivery
 

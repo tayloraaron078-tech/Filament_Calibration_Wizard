@@ -37,6 +37,7 @@ import {
   isAutomatedCalibrationEnabled,
   discoverEngines,
   InstalledOrcaEngine,
+  ManagedOrcaEngine,
   nativeEngineBridge,
   beginSession,
   buildWorkingProfile,
@@ -46,6 +47,7 @@ import {
   stepReadiness,
   orderWorkflow,
   getStepDefinition,
+  type EngineId,
   type EngineStatus,
   type PrinterSelection,
   type AutomatedCalibrationSession,
@@ -103,7 +105,6 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   );
 
   const rerender = async () => { clear(root); await renderAutomated(root, id); };
-  const engine = new InstalledOrcaEngine();
 
   // --- engine status card ---
   const engineCard = h('div', { class: 'card' });
@@ -120,12 +121,22 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
     diag.warnings.forEach(w => engineCard.append(h('p', { class: 'field-help' }, w)));
     engineCard.append(h('div', { class: 'btn-row' },
       h('button', {
-        class: 'btn btn-sm', onClick: async () => { await engine.detect(); await paintEngineCard(); }
+        class: 'btn btn-sm', onClick: async () => { await paintEngineCard(); }
       }, '🔄 Re-check')));
+    // Path B: no usable Orca detected → offer to install the managed one.
+    if (diag.desktop && !isOrcaEngine(diag.recommendedEngineId)) {
+      const managed = diag.engines.find(e => e.engineId === 'managed_orca');
+      renderManagedInstall(engineCard, managed, () => rerender());
+    }
     return diag;
   };
   const diag = await paintEngineCard();
-  await engine.detect();
+  // Drive resolve/prepare/slice with whichever Orca engine is recommended — the
+  // user's own install (Path A) or the PerfectFit-managed one (Path B).
+  const engine = diag.recommendedEngineId === 'managed_orca'
+    ? new ManagedOrcaEngine()
+    : new InstalledOrcaEngine();
+  if (diag.desktop) await engine.detect();
 
   // --- session card ---
   const sessionCard = h('div', { class: 'card' });
@@ -146,7 +157,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
         displayName: manual ? `${mat.label} · ${manual.machine}` : `${mat.label} · ${printer!.name}`,
         sourceProfileName: resolved.printerSettingsId ?? undefined
       });
-      beginSession(p, { slicerMode: 'installed_orca', engineId: 'installed_orca', workingProfile });
+      beginSession(p, { slicerMode: engine.id, engineId: engine.id, workingProfile });
       p.manualOrcaPreset = manual;
       await saveProject(p);
       toast(`Session started on ${resolved.printerModel ?? manual?.machine ?? printer?.name}.`, 'success');
@@ -157,7 +168,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   };
 
   if (!load.automated) {
-    const canStart = diag.recommendedEngineId === 'installed_orca' && !!selection;
+    const canStart = isOrcaEngine(diag.recommendedEngineId) && !!selection;
     const manualCard = h('div', {});
 
     sessionCard.append(h('div', {},
@@ -168,16 +179,16 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
       !printer ? h('p', { class: 'callout callout-warn' }, 'This project has no printer profile — set one on the project page first.') : null,
       printer && !selection ? h('p', { class: 'callout callout-warn' },
         'This printer profile isn’t linked to PerfectFit’s printer database, so it can’t be matched to an installed OrcaSlicer machine preset automatically. Pick one by hand below, or re-select the printer from the database on the Printers page.') : null,
-      diag.recommendedEngineId !== 'installed_orca'
-        ? h('p', { class: 'callout callout-warn' }, 'No usable OrcaSlicer install was detected — install OrcaSlicer 2.4.x, or select its executable, then re-check above.')
+      !isOrcaEngine(diag.recommendedEngineId)
+        ? h('p', { class: 'callout callout-warn' }, 'No usable OrcaSlicer engine yet — install OrcaSlicer 2.4.x yourself, or use “Install OrcaSlicer for PerfectFit” above, then re-check.')
         : null,
       h('div', { class: 'btn-row' },
         canStart ? h('button', { class: 'btn btn-primary', onClick: () => doStartSession() }, '▶ Start automated session') : null,
-        diag.recommendedEngineId === 'installed_orca'
+        isOrcaEngine(diag.recommendedEngineId)
           ? h('button', {
               class: 'btn btn-sm', onClick: async () => {
                 if (manualCard.childElementCount) { clear(manualCard); return; }
-                await renderManualPicker(manualCard, m => doStartSession(m));
+                await renderManualPicker(manualCard, engine.id, m => doStartSession(m));
               }
             }, '🔧 Pick the Orca printer/filament manually')
           : null
@@ -236,7 +247,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
         h('button', {
           class: 'btn btn-sm', onClick: async () => {
             if (restartManualCard.childElementCount) { clear(restartManualCard); return; }
-            await renderManualPicker(restartManualCard, m => doStartSession(m));
+            await renderManualPicker(restartManualCard, engine.id, m => doStartSession(m));
           }
         }, '🔧 Pick the Orca printer/filament manually')
       ),
@@ -264,7 +275,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
 
   // --- workflow steps: prepare + slice each one, in place ---
   const manualPreset = session.manualOrcaPreset;
-  const canSlice = diag.recommendedEngineId === 'installed_orca' && (!!selection || !!manualPreset);
+  const canSlice = isOrcaEngine(diag.recommendedEngineId) && (!!selection || !!manualPreset);
   if (manualPreset) {
     sessionCard.append(h('p', { class: 'field-help' },
       `Using a manually picked Orca preset: ${manualPreset.vendor} — ${manualPreset.machine} · ${manualPreset.filament}.`));
@@ -440,6 +451,70 @@ function describePrepareError(err: unknown): string {
   return `Could not prepare this test: ${msg}`;
 }
 
+/** Both Orca engines (the user's own install and the PerfectFit-managed one)
+ *  can resolve/slice; the manual-export fallback cannot. */
+function isOrcaEngine(id: EngineId | null): boolean {
+  return id === 'installed_orca' || id === 'managed_orca';
+}
+
+/**
+ * Path-B opt-in: download + install the PerfectFit-managed OrcaSlicer. Discloses
+ * plainly that this installs a separate program (OrcaSlicer, AGPL-3.0) which
+ * PerfectFit drives via automation. The pinned build + checksum live in native
+ * code; the download is cancellable. On success, `onDone` re-renders the screen
+ * (the managed engine then becomes the recommended one).
+ */
+function renderManagedInstall(
+  container: HTMLElement,
+  managed: EngineStatus | undefined,
+  onDone: () => void | Promise<void>
+): void {
+  const invalid = !!managed?.detected && !managed.valid;
+  const box = h('div', { class: 'callout callout-warn', style: 'margin-top:.6rem' });
+  const status = h('div', {});
+  const installBtn = h('button', { class: 'btn btn-primary btn-sm' },
+    invalid ? '↻ Reinstall OrcaSlicer' : '⭳ Install OrcaSlicer for PerfectFit') as HTMLButtonElement;
+
+  installBtn.addEventListener('click', async () => {
+    installBtn.disabled = true;
+    clear(status);
+    const token = `managed-install-${Date.now()}`;
+    status.append(
+      h('p', { class: 'field-help' }, '⏳ Downloading OrcaSlicer (~170 MB)… this can take a minute; keep this screen open.'),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn-sm', onClick: () => { void nativeEngineBridge.cancelCalibrationSlice(token); } }, 'Cancel')));
+    try {
+      const d = await new ManagedOrcaEngine().install(token);
+      if (d.detected && d.valid) {
+        toast('Managed OrcaSlicer installed.', 'success');
+        await onDone();
+      } else {
+        clear(status);
+        status.append(h('p', { class: 'callout callout-bad' }, d.errors.join(' ') || 'Install did not complete.'));
+        installBtn.disabled = false;
+      }
+    } catch (err) {
+      clear(status);
+      const msg = err instanceof Error ? err.message : String(err);
+      status.append(h('p', { class: 'callout callout-bad' },
+        /cancel/i.test(msg) ? 'Install cancelled.' : `Could not install OrcaSlicer: ${msg}`));
+      installBtn.disabled = false;
+    }
+  });
+
+  box.append(
+    h('h4', { style: 'margin:0 0 .3rem' },
+      invalid ? '⚠ The managed OrcaSlicer needs reinstalling' : '⚙ No OrcaSlicer found — PerfectFit can install it'),
+    h('p', { class: 'field-help' },
+      'PerfectFit can download and set up ', h('strong', {}, 'OrcaSlicer'),
+      ', a separate open-source slicing program (AGPL-3.0), and drive it automatically to slice your calibration tests. It is kept privately for PerfectFit and does not change any OrcaSlicer you install yourself.'));
+  if (invalid && managed?.errors.length) {
+    box.append(h('p', { class: 'field-help' }, managed.errors.join(' ')));
+  }
+  box.append(h('div', { class: 'btn-row' }, installBtn), status);
+  container.append(box);
+}
+
 /**
  * A manual Orca machine + filament picker, for when the automatic
  * printer-database mapping isn't usable (a hand-entered printer, or the
@@ -451,13 +526,14 @@ function describePrepareError(err: unknown): string {
  */
 async function renderManualPicker(
   container: HTMLElement,
+  engineId: EngineId,
   onChosen: (m: ManualOrcaPresetSelection) => Promise<void> | void
 ): Promise<void> {
   clear(container);
   container.append(h('p', { class: 'field-help' }, '⏳ Loading installed OrcaSlicer machines…'));
   let machines: RawMachinePreset[];
   try {
-    machines = await nativeEngineBridge.listInstalledMachines('installed_orca');
+    machines = await nativeEngineBridge.listInstalledMachines(engineId);
   } catch (err) {
     clear(container);
     container.append(h('p', { class: 'callout callout-bad' },
@@ -491,7 +567,7 @@ async function renderManualPicker(
     const m = usable[Number(machineSelect.value)];
     filamentSelect.append(h('option', { value: '' }, '⏳ Loading filaments…'));
     try {
-      filaments = await nativeEngineBridge.listVendorFilaments('installed_orca', m.vendor, m.name);
+      filaments = await nativeEngineBridge.listVendorFilaments(engineId, m.vendor, m.name);
     } catch {
       clear(filamentSelect);
       filamentSelect.append(h('option', { value: '' }, 'Could not load filaments'));
