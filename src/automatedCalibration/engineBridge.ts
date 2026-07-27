@@ -167,6 +167,11 @@ export interface EngineNativeBridge {
   isDesktop(): boolean;
   detectSlicingEngine(engineId: EngineId, manualExePath?: string): Promise<RawEngineDetection>;
   validateSlicingEngine(engineId: EngineId): Promise<RawEngineDetection>;
+  /** Download the pinned managed OrcaSlicer on demand, verify its checksum,
+   *  stage it under the managed engines root, and return the fresh detection.
+   *  The pin (url + sha256) lives in native code; cancellable via
+   *  `cancelCalibrationSlice` with the same token. */
+  downloadManagedOrca(cancellationToken?: string): Promise<RawEngineDetection>;
   runCalibrationSlice(args: RunSliceArgs): Promise<RawSliceRun>;
   cancelCalibrationSlice(cancellationToken: string): Promise<boolean>;
   /** Read a template project 3mf's project_settings.config text. */
@@ -228,6 +233,11 @@ export const nativeEngineBridge: EngineNativeBridge = {
   },
   validateSlicingEngine(engineId) {
     return invoke<RawEngineDetection>('validate_slicing_engine', { engineId });
+  },
+  downloadManagedOrca(cancellationToken) {
+    return invoke<RawEngineDetection>('download_managed_orca', {
+      cancellationToken: cancellationToken ?? null
+    });
   },
   runCalibrationSlice(args) {
     return invoke<RawSliceRun>('run_calibration_slice', {

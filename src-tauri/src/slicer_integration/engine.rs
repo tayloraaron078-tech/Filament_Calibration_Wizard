@@ -15,7 +15,7 @@
 use super::{iso_from_unix, now_unix, security};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -321,6 +321,166 @@ fn detect_managed_orca() -> Result<RawEngineDetection, String> {
         warnings,
         notes,
     })
+}
+
+// --- managed engine acquisition (Stage 9 incr. 2, download-on-demand) --------
+
+/// A pinned, checksummed Orca build the managed engine downloads on demand.
+struct PinnedOrcaBuild {
+    version: &'static str,
+    url: &'static str,
+    sha256: &'static str,
+    size: u64,
+}
+
+/// The pinned build for the current platform, or `None` where a managed build
+/// is not available yet. Only Windows x64 is pinned so far — Linux ships an
+/// AppImage (resources packed inside a self-mounting squashfs, not beside the
+/// exe), which needs different handling; macOS is de-prioritized.
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const PINNED_MANAGED_ORCA: Option<PinnedOrcaBuild> = Some(PinnedOrcaBuild {
+    version: "2.4.2",
+    url: "https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.4.2/OrcaSlicer_Windows_V2.4.2_x64_portable.zip",
+    sha256: "feba3009dfb9d268779cca5758a1a5bc3b7d0722bf8fa48d5c57340de975d6be",
+    size: 171_367_668,
+});
+#[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+const PINNED_MANAGED_ORCA: Option<PinnedOrcaBuild> = None;
+
+/// Stream a URL to a file while computing its SHA-256 in the same pass (the
+/// asset is ~170 MB — a second read just to hash would be wasteful), honoring a
+/// cancel flag. Returns the hex digest for the caller to verify.
+fn download_to_verifying(url: &str, dest: &Path, cancel: &Arc<AtomicBool>) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let resp = ureq::get(url)
+        .call()
+        .map_err(|e| format!("Download request failed: {e}"))?;
+    let mut reader = resp.into_reader();
+    let mut out =
+        std::fs::File::create(dest).map_err(|e| format!("Cannot create {}: {e}", dest.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 65_536];
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            drop(out);
+            std::fs::remove_file(dest).ok();
+            return Err("Download cancelled".into());
+        }
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| format!("Download read failed: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        out.write_all(&buf[..n])
+            .map_err(|e| format!("Write failed: {e}"))?;
+    }
+    out.flush().map_err(|e| format!("Flush failed: {e}"))?;
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// Extract a portable-Orca zip into `dest_root`, wiping it first (a re-install
+/// is clean) and confining every entry under it (zip-slip guard).
+fn stage_zip_into(zip_path: &Path, dest_root: &Path) -> Result<(), String> {
+    if dest_root.exists() {
+        std::fs::remove_dir_all(dest_root)
+            .map_err(|e| format!("Cannot clear {}: {e}", dest_root.display()))?;
+    }
+    std::fs::create_dir_all(dest_root)
+        .map_err(|e| format!("Cannot create {}: {e}", dest_root.display()))?;
+    let file =
+        std::fs::File::open(zip_path).map_err(|e| format!("Cannot open {}: {e}", zip_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Cannot read archive: {e}"))?;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Archive entry {i} unreadable: {e}"))?;
+        // `enclosed_name()` is the zip crate's zip-slip guard: it returns None
+        // for any entry whose path would escape the archive root (`..`, absolute
+        // paths, drive letters), so the join below always stays under dest_root.
+        let Some(rel) = entry.enclosed_name() else {
+            return Err(format!("Unsafe path in archive: {}", entry.name()));
+        };
+        let out = dest_root.join(&rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out).map_err(|e| format!("Cannot create dir: {e}"))?;
+        } else {
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create dir: {e}"))?;
+            }
+            let mut outfile = std::fs::File::create(&out)
+                .map_err(|e| format!("Cannot write {}: {e}", out.display()))?;
+            std::io::copy(&mut entry, &mut outfile)
+                .map_err(|e| format!("Extract failed for {}: {e}", out.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Download the pinned managed Orca, verify its checksum, extract it into the
+/// managed root, record its version, and return a fresh detection (which writes
+/// the tamper-evident manifest). The pin lives here in native code — the
+/// frontend never supplies a URL, so it cannot redirect the download. The
+/// download is cancellable via `cancel_calibration_slice` with the same token.
+#[tauri::command]
+pub fn download_managed_orca(
+    cancellation_token: Option<String>,
+) -> Result<RawEngineDetection, String> {
+    let Some(pin) = PINNED_MANAGED_ORCA else {
+        return Err(
+            "No managed OrcaSlicer build is available for this platform yet. Install OrcaSlicer manually and use the installed engine instead."
+                .into(),
+        );
+    };
+    let engines = security::engines_root()?;
+    std::fs::create_dir_all(&engines).map_err(|e| format!("Cannot create engines dir: {e}"))?;
+    let root = engines.join("managed-orca");
+    let tmp_zip = engines.join(".managed-orca-download.zip");
+
+    // Register a cancel flag before the long download so a concurrent cancel can
+    // win — the same registry/command the slice runner uses.
+    let cancel = Arc::new(AtomicBool::new(false));
+    let token = cancellation_token.filter(|t| !t.is_empty());
+    if let Some(tok) = &token {
+        cancel_registry()
+            .lock()
+            .map_err(|_| "cancel registry poisoned".to_string())?
+            .insert(tok.clone(), cancel.clone());
+    }
+    let download = download_to_verifying(pin.url, &tmp_zip, &cancel);
+    if let Some(tok) = &token {
+        if let Ok(mut reg) = cancel_registry().lock() {
+            reg.remove(tok);
+        }
+    }
+    let got = download?;
+
+    if !got.eq_ignore_ascii_case(pin.sha256) {
+        std::fs::remove_file(&tmp_zip).ok();
+        return Err(format!(
+            "Integrity check failed: the downloaded OrcaSlicer {} did not match its expected checksum. Nothing was installed.",
+            pin.version
+        ));
+    }
+    if let Ok(meta) = std::fs::metadata(&tmp_zip) {
+        if meta.len() != pin.size {
+            std::fs::remove_file(&tmp_zip).ok();
+            return Err("Downloaded size did not match the pinned build. Nothing was installed.".into());
+        }
+    }
+
+    stage_zip_into(&tmp_zip, &root)?;
+    std::fs::remove_file(&tmp_zip).ok();
+    std::fs::write(root.join("version.txt"), pin.version)
+        .map_err(|e| format!("Cannot record managed engine version: {e}"))?;
+
+    // Validate the freshly-staged build and persist its manifest.
+    detect_managed_orca()
 }
 
 /// Locate the `resources/` directory that ships beside an Orca executable.
@@ -747,7 +907,9 @@ pub fn run_calibration_slice(
     timeout_ms: u64,
     cancellation_token: Option<String>,
 ) -> Result<RawSliceRun, String> {
-    if engine_id != INSTALLED_ORCA {
+    // Both Orca engines slice through this runner; they differ only in where the
+    // manifest-vetted executable lives (user install vs our managed root).
+    if engine_id != INSTALLED_ORCA && engine_id != MANAGED_ORCA {
         return Err(format!("Engine '{engine_id}' has no native slice runner"));
     }
     // Resolve the vetted executable from the manifest (never from the frontend).
@@ -928,6 +1090,71 @@ mod tests {
         std::fs::write(&fexe, b"x").unwrap();
         assert_eq!(find_managed_orca_in(&fold), Some(fexe));
         std::fs::remove_dir_all(&fold).ok();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn stage_zip_extracts_a_portable_orca_and_detects_it() {
+        let d = temp_dir("stage_zip");
+        let zip_path = d.join("orca.zip");
+        // A minimal "portable Orca": exe + resources/calib + resources/profiles.
+        {
+            let f = std::fs::File::create(&zip_path).unwrap();
+            let mut zw = zip::ZipWriter::new(f);
+            let opts = zip::write::SimpleFileOptions::default();
+            zw.start_file("orca-slicer.exe", opts).unwrap();
+            zw.write_all(b"MZ fake").unwrap();
+            zw.add_directory("resources/calib/", opts).unwrap();
+            zw.start_file("resources/calib/model.stl", opts).unwrap();
+            zw.write_all(b"x").unwrap();
+            zw.add_directory("resources/profiles/", opts).unwrap();
+            zw.start_file("resources/profiles/BBL.json", opts).unwrap();
+            zw.write_all(b"{}").unwrap();
+            zw.finish().unwrap();
+        }
+        let root = d.join("managed-orca");
+        stage_zip_into(&zip_path, &root).unwrap();
+        // Flat staged tree → find + structural validation both succeed.
+        let exe = find_managed_orca_in(&root).expect("staged exe");
+        assert_eq!(exe, root.join("orca-slicer.exe"));
+        let (caps, errors, _) = validate_orca_capabilities(&exe);
+        assert!(errors.is_empty(), "unexpected: {errors:?}");
+        assert!(caps.slice);
+        // Re-staging is idempotent (wipes + replaces).
+        stage_zip_into(&zip_path, &root).unwrap();
+        assert!(find_managed_orca_in(&root).is_some());
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    /// Stages the real 171 MB pinned Orca zip (downloaded once into the session
+    /// scratchpad) and asserts it checksums to the pin and detects as valid —
+    /// the download-on-demand pipeline minus the network fetch. Machine-specific
+    /// path, hence ignored (same pattern as the real-Orca slice probes).
+    /// Run: cargo test --lib engine::tests::probe_stage_real_orca_zip -- --ignored --nocapture
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn probe_stage_real_orca_zip() {
+        let zip = PathBuf::from(
+            r"C:\Users\prsda\AppData\Local\Temp\claude\C--Users-prsda-Documents-GitHub-Filament-Calibration-Wizard\ad8a8d15-cc41-4d81-9309-b417fe87a847\scratchpad\orca-2.4.2-x64.zip",
+        );
+        if !zip.is_file() {
+            eprintln!("scratchpad zip missing — skipping probe");
+            return;
+        }
+        assert_eq!(
+            sha256_file(&zip).unwrap(),
+            "feba3009dfb9d268779cca5758a1a5bc3b7d0722bf8fa48d5c57340de975d6be"
+        );
+        let d = temp_dir("real_stage");
+        let root = d.join("managed-orca");
+        stage_zip_into(&zip, &root).unwrap();
+        let exe = find_managed_orca_in(&root).expect("orca-slicer.exe staged");
+        assert_eq!(exe, root.join("orca-slicer.exe"));
+        let (caps, errors, _) = validate_orca_capabilities(&exe);
+        assert!(errors.is_empty(), "unexpected: {errors:?}");
+        assert!(caps.slice && caps.export_3mf);
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]

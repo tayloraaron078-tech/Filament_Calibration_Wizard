@@ -94,6 +94,7 @@ function fakeBridge(overrides: Partial<EngineNativeBridge> = {}): EngineNativeBr
     isDesktop: () => true,
     detectSlicingEngine: async () => VALID_ORCA,
     validateSlicingEngine: async () => VALID_ORCA,
+    downloadManagedOrca: async () => ({ ...VALID_ORCA, engine_id: 'managed_orca', display_name: 'Managed OrcaSlicer', source: 'managed' }),
     runCalibrationSlice: async () => SLICE_OK,
     cancelCalibrationSlice: async () => true,
     readProjectConfig: async () => TEMPLATE_CONFIG,
@@ -720,6 +721,30 @@ describe('ManagedOrcaEngine', () => {
     const d = await engine.detect();
     expect(d.detected).toBe(false);
     expect((await engine.getCapabilities()).slice).toBe(false);
+  });
+
+  it('install() downloads-on-demand and returns the staged detection', async () => {
+    let called = 0;
+    const engine = new ManagedOrcaEngine(
+      fakeBridge({
+        downloadManagedOrca: async (token?: string) => {
+          called++;
+          expect(token).toBe('tok-1');
+          return { ...VALID_ORCA, engine_id: 'managed_orca', display_name: 'Managed OrcaSlicer', source: 'managed' };
+        }
+      })
+    );
+    const d = await engine.install('tok-1');
+    expect(called).toBe(1);
+    expect(d.detected).toBe(true);
+    expect(d.engineId).toBe('managed_orca');
+    // The result is remembered, so a follow-up status needs no re-detect fallback.
+    expect((await engine.getCapabilities()).slice).toBe(true);
+  });
+
+  it('install() is unavailable off the desktop', async () => {
+    const engine = new ManagedOrcaEngine(fakeBridge({ isDesktop: () => false }));
+    await expect(engine.install()).rejects.toThrow(/NOT_DESKTOP/);
   });
 });
 

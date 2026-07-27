@@ -81,6 +81,7 @@ pub fn run() {
       install::save_exported_profile,
       engine::detect_slicing_engine,
       engine::validate_slicing_engine,
+      engine::download_managed_orca,
       engine::run_calibration_slice,
       engine::cancel_calibration_slice,
       project_assembly::read_project_config,

@@ -77,7 +77,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
   readonly id: EngineId;
   readonly displayName: string;
 
-  private readonly bridge: EngineNativeBridge;
+  protected readonly bridge: EngineNativeBridge;
   private lastRaw: RawEngineDetection | null = null;
   private lastVersion: string | null = null;
 
@@ -123,7 +123,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     };
   }
 
-  private remember(raw: RawEngineDetection): RawEngineDetection {
+  protected remember(raw: RawEngineDetection): RawEngineDetection {
     this.lastRaw = raw;
     this.lastVersion = raw.version;
     return raw;
