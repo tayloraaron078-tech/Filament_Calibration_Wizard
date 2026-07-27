@@ -112,6 +112,7 @@ export {
 export type { OrcaFilamentPreset, FilamentSelectionOptions } from './filamentSelection';
 
 export { InstalledOrcaEngine } from './engines/installedOrcaEngine';
+export { ManagedOrcaEngine } from './engines/managedOrcaEngine';
 export { ManualExportEngine } from './engines/manualExportEngine';
 export {
   baseName,

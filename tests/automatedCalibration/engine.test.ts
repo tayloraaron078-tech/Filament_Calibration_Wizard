@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   InstalledOrcaEngine,
+  ManagedOrcaEngine,
   ManualExportEngine,
   discoverEngines,
   splitRawDetection,
@@ -686,6 +687,42 @@ describe('InstalledOrcaEngine (web build)', () => {
   });
 });
 
+// --- ManagedOrcaEngine (Stage 9) --------------------------------------------
+
+describe('ManagedOrcaEngine', () => {
+  it('identifies as the managed engine and detects via the managed id', async () => {
+    const calls: string[] = [];
+    const engine = new ManagedOrcaEngine(
+      fakeBridge({
+        detectSlicingEngine: async (id: string) => {
+          calls.push(id);
+          return { ...VALID_ORCA, engine_id: id };
+        }
+      })
+    );
+    expect(engine.id).toBe('managed_orca');
+    expect(engine.displayName).toBe('Managed OrcaSlicer');
+    const status = await engine.status();
+    expect(status.engineId).toBe('managed_orca'); // built from this.id, not the raw
+    expect(calls).toContain('managed_orca');
+    expect(calls).not.toContain('installed_orca');
+  });
+
+  it('shares the installed-Orca slicing path but tags jobs with its own id', async () => {
+    const engine = new ManagedOrcaEngine(fakeBridge());
+    const job = await engine.slice(PREPARED, { outputDir: 'o', timeoutMs: 1000 });
+    expect(job.succeeded).toBe(true);
+    expect(job.engineId).toBe('managed_orca');
+  });
+
+  it('reports not-detected off the desktop, same as the installed engine', async () => {
+    const engine = new ManagedOrcaEngine(fakeBridge({ isDesktop: () => false }));
+    const d = await engine.detect();
+    expect(d.detected).toBe(false);
+    expect((await engine.getCapabilities()).slice).toBe(false);
+  });
+});
+
 // --- engine diagnostics -----------------------------------------------------
 
 describe('engine diagnostics', () => {
@@ -693,7 +730,22 @@ describe('engine diagnostics', () => {
     const diag = await discoverEngines(fakeBridge());
     expect(diag.desktop).toBe(true);
     expect(diag.recommendedEngineId).toBe('installed_orca');
-    expect(diag.engines.map((e) => e.engineId)).toEqual(expect.arrayContaining(['installed_orca', 'manual_export']));
+    expect(diag.engines.map((e) => e.engineId)).toEqual(
+      expect.arrayContaining(['installed_orca', 'managed_orca', 'manual_export'])
+    );
+    expect(diag.warnings).toHaveLength(0);
+  });
+
+  it('recommends the managed Orca when no installed Orca is usable but the managed one is', async () => {
+    // The native side keys detection by engine id: installed is invalid here,
+    // managed is valid — the managed engine should win over manual export.
+    const diag = await discoverEngines(
+      fakeBridge({
+        detectSlicingEngine: async (id: string) =>
+          id === 'managed_orca' ? { ...VALID_ORCA, engine_id: id } : { ...INVALID_ORCA, engine_id: id }
+      })
+    );
+    expect(diag.recommendedEngineId).toBe('managed_orca');
     expect(diag.warnings).toHaveLength(0);
   });
 

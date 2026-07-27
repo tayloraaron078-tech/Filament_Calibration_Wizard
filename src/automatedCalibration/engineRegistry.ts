@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { type EngineNativeBridge, nativeEngineBridge } from './engineBridge';
 import { InstalledOrcaEngine } from './engines/installedOrcaEngine';
+import { ManagedOrcaEngine } from './engines/managedOrcaEngine';
 import { ManualExportEngine } from './engines/manualExportEngine';
 
 /** Flattened detection + validation + capability view of one engine. */
@@ -47,10 +48,17 @@ interface DiagnosableEngine {
   status(): Promise<EngineStatus>;
 }
 
-/** Build the engine list. Manual export is always present; the installed-Orca
- *  engine is present but reports "not detected" without a desktop bridge. */
+/** Build the engine list, in recommendation-preference order. An Orca the user
+ *  already installed wins (no download needed); the PerfectFit-managed Orca is
+ *  the download-on-demand fallback for users without one; manual export is the
+ *  always-available last resort. Both Orca engines report "not detected"
+ *  without a desktop bridge. */
 export function createEngines(bridge: EngineNativeBridge = nativeEngineBridge): DiagnosableEngine[] {
-  return [new InstalledOrcaEngine(bridge), new ManualExportEngine()];
+  return [
+    new InstalledOrcaEngine(bridge),
+    new ManagedOrcaEngine(bridge),
+    new ManualExportEngine()
+  ];
 }
 
 /** True when an engine can actually turn a prepared project into g-code now. */
@@ -60,9 +68,10 @@ function canSlice(s: EngineStatus): boolean {
 
 /**
  * Probe every engine and summarize. Recommends the first slice-capable engine
- * (installed Orca, listed first) and otherwise falls back to manual export,
- * which is always available. Never throws — a probe failure is reported as an
- * engine error, so the diagnostics screen always renders.
+ * in preference order (installed Orca, then the managed Orca) and otherwise
+ * falls back to manual export, which is always available. Never throws — a
+ * probe failure is reported as an engine error, so the diagnostics screen
+ * always renders.
  */
 export async function discoverEngines(
   bridge: EngineNativeBridge = nativeEngineBridge

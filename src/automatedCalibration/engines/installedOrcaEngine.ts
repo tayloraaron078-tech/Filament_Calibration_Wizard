@@ -18,6 +18,7 @@ import type {
   AutomatedCalibrationSession,
   CalibrationStepDefinition,
   EngineDetectionResult,
+  EngineId,
   EngineValidationResult,
   PreparedCalibrationProject,
   PrinterSelection,
@@ -70,18 +71,28 @@ import {
   splitRawDetection
 } from './engineSupport';
 
-const ENGINE_ID = 'installed_orca' as const;
+const INSTALLED_ORCA_ID: EngineId = 'installed_orca';
 
 export class InstalledOrcaEngine implements SlicingEngine {
-  readonly id = ENGINE_ID;
-  readonly displayName = 'Installed OrcaSlicer';
+  readonly id: EngineId;
+  readonly displayName: string;
 
   private readonly bridge: EngineNativeBridge;
   private lastRaw: RawEngineDetection | null = null;
   private lastVersion: string | null = null;
 
-  constructor(bridge: EngineNativeBridge = nativeEngineBridge) {
+  // `id`/`displayName` are parameterized so ManagedOrcaEngine (Stage 9) can
+  // reuse this entire implementation — the only differences between the
+  // installed and managed Orca engines are their identity and where the native
+  // side looks for the executable (both keyed by this id in the manifest).
+  constructor(
+    bridge: EngineNativeBridge = nativeEngineBridge,
+    id: EngineId = INSTALLED_ORCA_ID,
+    displayName = 'Installed OrcaSlicer'
+  ) {
     this.bridge = bridge;
+    this.id = id;
+    this.displayName = displayName;
   }
 
   get version(): string | undefined {
@@ -91,7 +102,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
   /** Web-build fallback used whenever no desktop bridge is present. */
   private notDesktopRaw(): RawEngineDetection {
     return {
-      engine_id: ENGINE_ID,
+      engine_id: this.id,
       detected: false,
       display_name: this.displayName,
       version: null,
@@ -122,7 +133,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
   async detect(manualExePath?: string): Promise<EngineDetectionResult> {
     const raw = this.remember(
       this.bridge.isDesktop()
-        ? await this.bridge.detectSlicingEngine(ENGINE_ID, manualExePath)
+        ? await this.bridge.detectSlicingEngine(this.id, manualExePath)
         : this.notDesktopRaw()
     );
     return splitRawDetection(raw).detection;
@@ -131,7 +142,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
   /** Re-validate a previously-detected engine from its persisted manifest. */
   async validate(): Promise<EngineValidationResult> {
     if (!this.bridge.isDesktop()) return splitRawDetection(this.notDesktopRaw()).validation;
-    const raw = this.remember(await this.bridge.validateSlicingEngine(ENGINE_ID));
+    const raw = this.remember(await this.bridge.validateSlicingEngine(this.id));
     return splitRawDetection(raw).validation;
   }
 
@@ -139,7 +150,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (this.lastRaw?.valid) return splitRawDetection(this.lastRaw).capabilities;
     const raw = this.remember(
       this.bridge.isDesktop()
-        ? await this.bridge.detectSlicingEngine(ENGINE_ID)
+        ? await this.bridge.detectSlicingEngine(this.id)
         : this.notDesktopRaw()
     );
     return raw.valid ? splitRawDetection(raw).capabilities : emptyEngineCapabilities();
@@ -149,12 +160,12 @@ export class InstalledOrcaEngine implements SlicingEngine {
   async status(): Promise<EngineStatus> {
     const raw = this.remember(
       this.bridge.isDesktop()
-        ? await this.bridge.detectSlicingEngine(ENGINE_ID)
+        ? await this.bridge.detectSlicingEngine(this.id)
         : this.notDesktopRaw()
     );
     const { detection, validation, capabilities } = splitRawDetection(raw);
     return {
-      engineId: ENGINE_ID,
+      engineId: this.id,
       displayName: detection.displayName,
       detected: detection.detected,
       valid: validation.valid,
@@ -186,7 +197,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (!this.bridge.isDesktop()) {
       throw new Error('NOT_DESKTOP: preset resolution requires the desktop app.');
     }
-    const raw = await this.bridge.resolvePresetByNames({ engineId: ENGINE_ID, ...names });
+    const raw = await this.bridge.resolvePresetByNames({ engineId: this.id, ...names });
     return {
       settings: JSON.parse(raw.settings_json) as Record<string, unknown>,
       printerModel: raw.printer_model,
@@ -211,7 +222,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (!spec) {
       throw new Error(`PRINTER_NOT_FOUND: no printer-DB entry for '${selection.printerProfileId}'.`);
     }
-    const machines = await this.bridge.listInstalledMachines(ENGINE_ID);
+    const machines = await this.bridge.listInstalledMachines(this.id);
     const mapping = mapPrinterToOrca(spec.model, selection.nozzleDiameterMm, machines);
     if (!mapping) {
       throw new Error(
@@ -247,7 +258,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (!this.bridge.isDesktop()) {
       throw new Error('NOT_DESKTOP: filament listing requires the desktop app.');
     }
-    const raw = await this.bridge.listVendorFilaments(ENGINE_ID, vendor, machineName);
+    const raw = await this.bridge.listVendorFilaments(this.id, vendor, machineName);
     return raw.map(fromRawFilament);
   }
 
@@ -365,7 +376,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
       ? mergeCalibrationIntoConfig(resolvedPreset.settings, session)
       : mergeCalibrationIntoProjectConfig(await this.bridge.readProjectConfig(resolved.location), session);
     const assembled = await this.bridge.assembleCalibrationProject({
-      engineId: ENGINE_ID,
+      engineId: this.id,
       sessionId: session.id,
       jobId,
       templatePath: resolved.location,
@@ -410,7 +421,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     setStartTemperature(config, range.startTemp);
 
     const assembled = await this.bridge.assembleTemperatureTower({
-      engineId: ENGINE_ID,
+      engineId: this.id,
       sessionId: session.id,
       jobId,
       stlPath,
@@ -467,7 +478,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     });
 
     const assembled = await this.bridge.assembleFlowTest({
-      engineId: ENGINE_ID,
+      engineId: this.id,
       sessionId: session.id,
       jobId,
       templatePath,
@@ -515,10 +526,10 @@ export class InstalledOrcaEngine implements SlicingEngine {
     options: SliceOptions
   ): Promise<SlicedCalibrationJob> {
     if (!this.bridge.isDesktop() || !project.projectFilePath) {
-      return notSlicedJob(project.id, project.stepId, ENGINE_ID, this.lastVersion);
+      return notSlicedJob(project.id, project.stepId, this.id, this.lastVersion);
     }
     const raw = await this.bridge.runCalibrationSlice({
-      engineId: ENGINE_ID,
+      engineId: this.id,
       sessionId: project.projectId,
       jobId: project.id,
       projectFileName: baseName(project.projectFilePath),
@@ -530,7 +541,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
       stepId: project.stepId,
       outputGcodePath: raw.gcode_path,
       outputArtifactPaths: raw.artifact_paths,
-      engineId: ENGINE_ID,
+      engineId: this.id,
       engineVersion: this.lastVersion,
       exitCode: raw.exit_code,
       durationMs: raw.duration_ms,

@@ -24,8 +24,13 @@ use std::time::{Duration, Instant};
 
 /// Manifest schema version for persisted engine records.
 const ENGINE_MANIFEST_SCHEMA: u32 = 1;
-/// Only this engine id has a native runner; the rest are TS-side.
+/// An OrcaSlicer install the user already has (or an exe they select).
 const INSTALLED_ORCA: &str = "installed_orca";
+/// A PerfectFit-managed OrcaSlicer, downloaded on demand into our own engines
+/// root (Stage 9). Detection/validation reuse the exact same structural checks
+/// and tamper-evident manifest as `installed_orca`; only the *location* differs
+/// (our managed root, never the user's Program Files / real Orca datadir).
+const MANAGED_ORCA: &str = "managed_orca";
 
 #[cfg(target_os = "windows")]
 fn no_window(cmd: &mut Command) -> &mut Command {
@@ -174,6 +179,148 @@ fn find_installed_orca() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The PerfectFit-managed Orca root (`<engines_root>/managed-orca`). The
+/// download-on-demand acquisition (Stage 9 incr. 2) extracts an Orca build here;
+/// this stays a pure path helper so detection works before any installer exists.
+fn managed_orca_root() -> Result<PathBuf, String> {
+    Ok(security::engines_root()?.join("managed-orca"))
+}
+
+/// Locate the managed Orca executable, if it has been installed. A portable Orca
+/// build extracts either flat (`managed-orca/orca-slicer.exe`) or under its own
+/// folder (`managed-orca/OrcaSlicer/orca-slicer.exe`); both layouts are accepted,
+/// and validation (below) still requires a real `resources/` tree beside the exe.
+fn find_managed_orca() -> Option<PathBuf> {
+    find_managed_orca_in(&managed_orca_root().ok()?)
+}
+
+/// Root-parameterized so the flat-vs-foldered layout logic is unit-testable
+/// without touching the real engines root.
+fn find_managed_orca_in(root: &Path) -> Option<PathBuf> {
+    let s = super::descriptor("orca").ok()?;
+    #[cfg(target_os = "windows")]
+    {
+        let foldered = root.join(s.windows_exe_candidates[0]); // OrcaSlicer\orca-slicer.exe
+        let flat = Path::new(s.windows_exe_candidates[0])
+            .file_name()
+            .map(|f| root.join(f)); // orca-slicer.exe
+        for cand in [Some(foldered), flat].into_iter().flatten() {
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    for cand in s.macos_app_candidates {
+        let p = root.join(cand);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = (root, s);
+    }
+    None
+}
+
+/// Version the acquisition step recorded next to the managed build, if any.
+/// Absent (returns `None`) until Stage 9 incr. 2 writes it — never fabricated.
+fn managed_orca_version() -> Option<String> {
+    let v = managed_orca_root().ok()?.join("version.txt");
+    std::fs::read_to_string(v).ok().and_then(|s| {
+        let t = s.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    })
+}
+
+/// Resolve and validate the PerfectFit-managed Orca engine, persisting its
+/// manifest. Mirrors `detect_installed_orca` but reads only from our managed
+/// root — there is no manual-exe path here (the location is ours, not chosen).
+fn detect_managed_orca() -> Result<RawEngineDetection, String> {
+    let mut notes = Vec::new();
+    let Some(exe) = find_managed_orca() else {
+        return Ok(RawEngineDetection {
+            engine_id: MANAGED_ORCA.into(),
+            detected: false,
+            display_name: "Managed OrcaSlicer".into(),
+            version: None,
+            executable_path: None,
+            source: "none".into(),
+            checksum_sha256: None,
+            capabilities: EngineCapabilities::empty(),
+            valid: false,
+            errors: vec![
+                "The managed OrcaSlicer engine has not been installed yet.".into(),
+            ],
+            warnings: Vec::new(),
+            notes,
+        });
+    };
+
+    let (capabilities, errors, warnings) = validate_orca_capabilities(&exe);
+    let valid = errors.is_empty();
+    let version = managed_orca_version();
+    if valid && version.is_none() {
+        notes.push("Managed Orca version file missing — reinstall to record it".into());
+    }
+
+    let checksum = if valid {
+        match sha256_file(&exe) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                notes.push(format!("Checksum unavailable: {e}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    if valid {
+        if let Some(ref checksum) = checksum {
+            let manifest = StoredEngineManifest {
+                schema_version: ENGINE_MANIFEST_SCHEMA,
+                engine_id: MANAGED_ORCA.into(),
+                display_name: "Managed OrcaSlicer".into(),
+                executable_path: exe.display().to_string(),
+                version: version.clone(),
+                source: "managed".into(),
+                checksum_sha256: checksum.clone(),
+                capabilities,
+                detected_at: iso_from_unix(now_unix()),
+            };
+            match security::engines_root() {
+                Ok(dir) => {
+                    if let Err(e) = write_manifest_to(&dir, &manifest) {
+                        notes.push(format!("Could not persist engine manifest: {e}"));
+                    }
+                }
+                Err(e) => notes.push(format!("Could not locate engines directory: {e}")),
+            }
+        }
+    }
+
+    Ok(RawEngineDetection {
+        engine_id: MANAGED_ORCA.into(),
+        detected: true,
+        display_name: "Managed OrcaSlicer".into(),
+        version,
+        executable_path: Some(exe.display().to_string()),
+        source: "managed".into(),
+        checksum_sha256: checksum,
+        capabilities,
+        valid,
+        errors,
+        warnings,
+        notes,
+    })
 }
 
 /// Locate the `resources/` directory that ships beside an Orca executable.
@@ -393,8 +540,10 @@ pub fn detect_slicing_engine(
 ) -> Result<RawEngineDetection, String> {
     if engine_id == INSTALLED_ORCA {
         detect_installed_orca(manual_exe_path)
+    } else if engine_id == MANAGED_ORCA {
+        detect_managed_orca()
     } else {
-        // manual_export / bambu_handoff / managed_orca have no native detection.
+        // manual_export / bambu_handoff have no native detection.
         Ok(RawEngineDetection {
             engine_id: engine_id.clone(),
             detected: false,
@@ -417,7 +566,9 @@ pub fn detect_slicing_engine(
 /// replaced or upgraded binary between sessions.
 #[tauri::command]
 pub fn validate_slicing_engine(engine_id: String) -> Result<RawEngineDetection, String> {
-    if engine_id != INSTALLED_ORCA {
+    // Only the manifest-backed Orca engines re-validate against a stored
+    // checksum; anything else falls back to plain detection.
+    if engine_id != INSTALLED_ORCA && engine_id != MANAGED_ORCA {
         return detect_slicing_engine(engine_id, None);
     }
     let dir = security::engines_root()?;
@@ -425,7 +576,7 @@ pub fn validate_slicing_engine(engine_id: String) -> Result<RawEngineDetection, 
         return Ok(RawEngineDetection {
             engine_id,
             detected: false,
-            display_name: "Installed OrcaSlicer".into(),
+            display_name: "OrcaSlicer".into(),
             version: None,
             executable_path: None,
             source: "none".into(),
@@ -457,7 +608,7 @@ pub fn validate_slicing_engine(engine_id: String) -> Result<RawEngineDetection, 
     }
 
     Ok(RawEngineDetection {
-        engine_id: INSTALLED_ORCA.into(),
+        engine_id: m.engine_id.clone(),
         detected: true,
         display_name: m.display_name,
         version: m.version,
@@ -752,6 +903,31 @@ mod tests {
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
         std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn managed_orca_layout_flat_and_foldered() {
+        // Absent → None.
+        let root = temp_dir("managed_absent");
+        assert!(find_managed_orca_in(&root).is_none());
+        std::fs::remove_dir_all(&root).ok();
+
+        // Flat layout: managed-orca/orca-slicer.exe.
+        let flat = temp_dir("managed_flat");
+        let exe = flat.join("orca-slicer.exe");
+        std::fs::write(&exe, b"x").unwrap();
+        assert_eq!(find_managed_orca_in(&flat), Some(exe));
+        std::fs::remove_dir_all(&flat).ok();
+
+        // Foldered layout: managed-orca/OrcaSlicer/orca-slicer.exe.
+        let fold = temp_dir("managed_fold");
+        let inner = fold.join("OrcaSlicer");
+        std::fs::create_dir_all(&inner).unwrap();
+        let fexe = inner.join("orca-slicer.exe");
+        std::fs::write(&fexe, b"x").unwrap();
+        assert_eq!(find_managed_orca_in(&fold), Some(fexe));
+        std::fs::remove_dir_all(&fold).ok();
     }
 
     #[test]
