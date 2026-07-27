@@ -250,7 +250,7 @@ pub fn model_settings_xml(object_id: u32, name: &str, item_transform: &str) -> S
     )
 }
 
-fn xml_escape(s: &str) -> String {
+pub(crate) fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -271,7 +271,7 @@ const ROOT_RELS_XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
  <Relationship Target=\"/3D/3dmodel.model\" Id=\"rel-1\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n\
 </Relationships>\n";
 
-const SLICE_INFO_XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n  <header>\n    \
+pub(crate) const SLICE_INFO_XML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n  <header>\n    \
 <header_item key=\"X-BBL-Client-Type\" value=\"slicer\"/>\n    \
 <header_item key=\"X-BBL-Client-Version\" value=\"01.07.03.04\"/>\n  </header>\n</config>\n";
 

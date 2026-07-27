@@ -12,6 +12,7 @@ pub mod backup;
 pub mod discovery;
 pub mod engine;
 pub mod filesystem;
+pub mod flow_test;
 pub mod install;
 pub mod model_project;
 pub mod preset_resolver;

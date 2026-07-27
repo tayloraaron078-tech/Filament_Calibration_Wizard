@@ -52,6 +52,13 @@ import {
   generateTemperatureTowerGcode,
   towerHeightMm
 } from '../temperatureTower';
+import {
+  buildFlowObjectOverrides,
+  buildFlowPlateOverrides,
+  computePrintFlowRatio,
+  parseObjectFlowModifier,
+  FLOW_STEP_METHOD
+} from '../flowCalibration';
 import { getPrinterSpec } from '../../data/printerDatabase';
 import { getMaterial } from '../../data/materials';
 import type { MaterialId } from '../../types';
@@ -342,6 +349,9 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (step.id === 'temperature' && asset.assetType === 'stl') {
       return this.prepareTemperatureTower(session, step, resolved.location, resolvedPreset, jobId);
     }
+    if (asset.assetType === '3mf' && step.id in FLOW_STEP_METHOD) {
+      return this.prepareFlowTest(session, step, resolved.location, resolvedPreset, jobId);
+    }
     if (asset.assetType !== 'project-template') {
       throw new Error(
         `UNSUPPORTED_ASSET: '${step.id}' needs parameterized project generation, not yet available.`
@@ -407,6 +417,62 @@ export class InstalledOrcaEngine implements SlicingEngine {
       towerHeightMm: height,
       mergedConfigJson: serializeProjectConfig(config),
       customGcodeXml: xml,
+      outputFileName: 'project.3mf'
+    });
+    return this.preparedFrom(assembled, session.id, step, jobId);
+  }
+
+  /**
+   * Prepare a flow-rate-calibration project: read the template plate's object
+   * list, compute each object's `print_flow_ratio` override from its name (per
+   * Orca's own `adjust_settings_for_flowrate_calib` formula) plus the fixed
+   * per-object print-quality overrides, merge the plate-level overrides into the
+   * resolved config, and hand it all to the native assembler. A resolved printer
+   * preset is REQUIRED — the template plate carries no config, and the baseline
+   * flow ratio the modifiers are computed relative to comes from it.
+   */
+  private async prepareFlowTest(
+    session: AutomatedCalibrationSession,
+    step: CalibrationStepDefinition,
+    templatePath: string,
+    resolvedPreset: ResolvedPrinterPreset | undefined,
+    jobId: string
+  ): Promise<PreparedCalibrationProject> {
+    if (!resolvedPreset) {
+      throw new Error(
+        'RESOLVED_PRESET_REQUIRED: the flow-rate test plate has no embedded config; ' +
+          'resolve the printer+material first (resolveForMaterial) and pass the preset.'
+      );
+    }
+    const method = FLOW_STEP_METHOD[step.id];
+
+    const merged = mergeCalibrationIntoConfig(resolvedPreset.settings, session);
+    const config = parseProjectConfig(merged.text);
+    const baselineFlowRatio = firstNumber(config.filament_flow_ratio) ?? 1;
+    const nozzleDiameterMm = firstNumber(resolvedPreset.settings.nozzle_diameter) ?? 0.4;
+    const initialLayerHeight = firstNumber(config.initial_layer_print_height) ?? undefined;
+    for (const [key, value] of Object.entries(buildFlowPlateOverrides(nozzleDiameterMm, initialLayerHeight))) {
+      config[key] = value;
+    }
+
+    const rawObjects = await this.bridge.listFlowTestObjects(templatePath);
+    const objects = rawObjects.map((obj) => {
+      const modifier = parseObjectFlowModifier(obj.name);
+      const printFlowRatio = computePrintFlowRatio(method, modifier, baselineFlowRatio);
+      return {
+        id: obj.id,
+        name: obj.name,
+        overrides: buildFlowObjectOverrides(printFlowRatio, nozzleDiameterMm)
+      };
+    });
+
+    const assembled = await this.bridge.assembleFlowTest({
+      engineId: ENGINE_ID,
+      sessionId: session.id,
+      jobId,
+      templatePath,
+      mergedConfigJson: serializeProjectConfig(config),
+      objects,
       outputFileName: 'project.3mf'
     });
     return this.preparedFrom(assembled, session.id, step, jobId);

@@ -89,6 +89,9 @@ export type {
   RawAssembledProject,
   AssembleProjectArgs,
   AssembleTowerArgs,
+  RawFlowObject,
+  FlowObjectOverrides,
+  AssembleFlowArgs,
   RawResolvedPreset,
   ResolvePresetArgs,
   RawMachinePreset,
@@ -148,3 +151,14 @@ export type {
   TemperatureRange,
   TemperatureTowerGeometry
 } from './temperatureTower';
+
+export {
+  parseObjectFlowModifier,
+  computePrintFlowRatio,
+  buildFlowObjectOverrides,
+  buildFlowPlateOverrides,
+  nozzleDependentObjectOverrides,
+  FLOW_OBJECT_FIXED_OVERRIDES,
+  FLOW_STEP_METHOD
+} from './flowCalibration';
+export type { FlowTestMethod } from './flowCalibration';

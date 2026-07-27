@@ -96,6 +96,30 @@ export interface AssembleTowerArgs {
   outputFileName: string;
 }
 
+export interface RawFlowObject {
+  id: number;
+  name: string;
+}
+
+export interface FlowObjectOverrides {
+  id: number;
+  name: string;
+  overrides: Record<string, string>;
+}
+
+export interface AssembleFlowArgs {
+  engineId: EngineId;
+  sessionId: string;
+  jobId: string;
+  /** Source flow-calibration template 3mf (under the user's Orca install). */
+  templatePath: string;
+  /** The merged project_settings.config text to embed. */
+  mergedConfigJson: string;
+  /** Every plate object's id/name (echoed back) and computed overrides. */
+  objects: FlowObjectOverrides[];
+  outputFileName: string;
+}
+
 export interface RawResolvedPreset {
   /** Flat combined settings, JSON-serialized (shaped like project_settings.config). */
   settings_json: string;
@@ -152,6 +176,12 @@ export interface EngineNativeBridge {
   /** Stage a temperature-tower project (STL cut to height + merged config +
    *  per-band custom g-code) into the job. */
   assembleTemperatureTower(args: AssembleTowerArgs): Promise<RawAssembledProject>;
+  /** List the id/name of every object on a flow-calibration template plate, so
+   *  the caller can compute each object's per-object flow-ratio override. */
+  listFlowTestObjects(templatePath: string): Promise<RawFlowObject[]>;
+  /** Stage a flow-rate-calibration project (template plate + merged config +
+   *  per-object flow-ratio overrides) into the job. */
+  assembleFlowTest(args: AssembleFlowArgs): Promise<RawAssembledProject>;
   /** Resolve an Orca printer/process/filament selection (by exact preset names)
    *  into a flat project_settings.config via the vendor `inherits` chains. */
   resolvePresetByNames(args: ResolvePresetArgs): Promise<RawResolvedPreset>;
@@ -234,6 +264,20 @@ export const nativeEngineBridge: EngineNativeBridge = {
       towerHeightMm: args.towerHeightMm,
       mergedConfigJson: args.mergedConfigJson,
       customGcodeXml: args.customGcodeXml,
+      outputFileName: args.outputFileName
+    });
+  },
+  listFlowTestObjects(templatePath) {
+    return invoke<RawFlowObject[]>('list_flow_test_objects', { templatePath });
+  },
+  assembleFlowTest(args) {
+    return invoke<RawAssembledProject>('assemble_flow_test', {
+      engineId: args.engineId,
+      sessionId: args.sessionId,
+      jobId: args.jobId,
+      templatePath: args.templatePath,
+      mergedConfigJson: args.mergedConfigJson,
+      objectsJson: JSON.stringify(args.objects),
       outputFileName: args.outputFileName
     });
   },

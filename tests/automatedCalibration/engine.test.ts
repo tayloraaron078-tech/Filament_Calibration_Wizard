@@ -16,7 +16,8 @@ import type {
   RawSliceRun,
   RunSliceArgs,
   AssembleProjectArgs,
-  AssembleTowerArgs
+  AssembleTowerArgs,
+  AssembleFlowArgs
 } from '../../src/automatedCalibration';
 import type { PreparedCalibrationProject, AutomatedCalibrationSession } from '../../src/automatedCalibration';
 
@@ -97,6 +98,8 @@ function fakeBridge(overrides: Partial<EngineNativeBridge> = {}): EngineNativeBr
     readProjectConfig: async () => TEMPLATE_CONFIG,
     assembleCalibrationProject: async () => ASSEMBLED,
     assembleTemperatureTower: async () => ASSEMBLED,
+    listFlowTestObjects: async () => FLOW_PASS1_OBJECTS,
+    assembleFlowTest: async () => ASSEMBLED,
     resolvePresetByNames: async () => RESOLVED_PRESET,
     listInstalledMachines: async () => INSTALLED_MACHINES,
     listVendorFilaments: async () => INSTALLED_FILAMENTS,
@@ -156,6 +159,12 @@ const INSTALLED_MACHINES = [
     default_print_profile: '0.30mm Standard @BBL X1C 0.6 nozzle',
     default_filament_profile: null
   }
+];
+
+const FLOW_PASS1_OBJECTS = [
+  { id: 1, name: 'flowrate_0' },
+  { id: 3, name: 'flowrate_10' },
+  { id: 11, name: 'flowrate_m10' }
 ];
 
 const RESOLVED_PRESET = {
@@ -509,10 +518,10 @@ describe('InstalledOrcaEngine.prepareProject', () => {
     expect(merged.pressure_advance).toEqual(['0.03']);
   });
 
-  it('rejects a step that still needs parameterized generation (flow)', async () => {
+  it('rejects a step that still needs parameterized generation (retraction)', async () => {
     const engine = new InstalledOrcaEngine(fakeBridge());
     await engine.detect();
-    const step = getStepDefinition('flow-pass1')!;
+    const step = getStepDefinition('retraction')!;
     await expect(engine.prepareProject(paSession(), step)).rejects.toThrow(/UNSUPPORTED_ASSET/);
   });
 
@@ -584,6 +593,79 @@ describe('InstalledOrcaEngine.prepareProject (temperature tower)', () => {
     await engine.detect();
     const step = getStepDefinition('temperature')!;
     await expect(engine.prepareProject(tempSession(), step)).rejects.toThrow(/RESOLVED_PRESET_REQUIRED/);
+  });
+});
+
+// --- InstalledOrcaEngine.prepareProject (flow-rate calibration, 3mf) ---------
+
+const RESOLVED_FOR_FLOW = {
+  settings: {
+    printer_settings_id: 'Bambu Lab X1 Carbon 0.4 nozzle',
+    nozzle_diameter: ['0.4'],
+    filament_flow_ratio: ['0.95'],
+    initial_layer_print_height: '0.2'
+  } as Record<string, unknown>,
+  printerModel: 'Bambu Lab X1 Carbon',
+  printerSettingsId: 'Bambu Lab X1 Carbon 0.4 nozzle',
+  source: 'vendor_profile' as const,
+  warnings: []
+};
+
+describe('InstalledOrcaEngine.prepareProject (flow-rate calibration)', () => {
+  it('computes a per-object print_flow_ratio from each object name and the resolved baseline', async () => {
+    let captured: AssembleFlowArgs | null = null;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        listFlowTestObjects: async () => FLOW_PASS1_OBJECTS,
+        assembleFlowTest: async (a) => {
+          captured = a;
+          return ASSEMBLED;
+        }
+      })
+    );
+    await engine.detect();
+    const step = getStepDefinition('flow-pass1')!;
+    const prepared = await engine.prepareProject(tempSession(), step, RESOLVED_FOR_FLOW);
+
+    expect(prepared.stepId).toBe('flow-pass1');
+    expect(captured).not.toBeNull();
+    expect(captured!.templatePath).toBeTruthy();
+    expect(captured!.objects).toHaveLength(3);
+
+    const byId = new Map(captured!.objects.map((o) => [o.id, o]));
+    // flowrate_0: percent formula, modifier 0 -> 1 + 0/100 = 1
+    expect(byId.get(1)!.overrides.print_flow_ratio).toBe('1');
+    // flowrate_10: modifier +10 -> 1 + 10/100 = 1.1
+    expect(byId.get(3)!.overrides.print_flow_ratio).toBe('1.1');
+    // flowrate_m10: modifier -10 -> 1 - 10/100 = 0.9
+    expect(byId.get(11)!.overrides.print_flow_ratio).toBe('0.9');
+    // fixed per-object overrides present on every object
+    expect(byId.get(1)!.overrides.sparse_infill_density).toBe('35%');
+    expect(byId.get(1)!.overrides.top_surface_pattern).toBe('archimedeanchords');
+    // nozzle-dependent line width (0.4 * 1.2)
+    expect(byId.get(1)!.overrides.top_surface_line_width).toBe('0.48');
+
+    // plate-level overrides merged into the config (0.4mm nozzle -> 0.2mm layer)
+    const cfg = JSON.parse(captured!.mergedConfigJson);
+    expect(cfg.layer_height).toBe('0.2');
+    expect(cfg.reduce_crossing_wall).toBe('1');
+  });
+
+  it('requires a resolved preset (the template plate has no embedded config)', async () => {
+    const engine = new InstalledOrcaEngine(fakeBridge());
+    await engine.detect();
+    const step = getStepDefinition('flow-pass1')!;
+    await expect(engine.prepareProject(tempSession(), step)).rejects.toThrow(/RESOLVED_PRESET_REQUIRED/);
+  });
+
+  it('supports flow-pass2 and flow-verify the same way', async () => {
+    const engine = new InstalledOrcaEngine(fakeBridge());
+    await engine.detect();
+    for (const stepId of ['flow-pass2', 'flow-verify'] as const) {
+      const step = getStepDefinition(stepId)!;
+      const prepared = await engine.prepareProject(tempSession(), step, RESOLVED_FOR_FLOW);
+      expect(prepared.stepId).toBe(stepId);
+    }
   });
 });
 
