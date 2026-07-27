@@ -3,6 +3,11 @@ import {
   buildTemperatureBands,
   serializeCustomGcodePerLayer,
   generateTemperatureTowerGcode,
+  defaultTowerGeometry,
+  bandCount,
+  towerHeightMm,
+  ORCA_BAND_HEIGHT_MM,
+  ORCA_TEMP_STEP_C,
   UNSET_EXTRUDER,
   type TemperatureRange,
   type TemperatureTowerGeometry
@@ -62,6 +67,24 @@ describe('serializeCustomGcodePerLayer', () => {
     const crafted = serializeCustomGcodePerLayer([{ topZ: 1, temperature: 200 }]);
     expect(crafted).toContain('extra="M104 S200"/>');
     expect(xml).toContain('top_z="5"');
+  });
+});
+
+describe('confirmed Orca constants (H2S PLA sample)', () => {
+  it('reproduces the real 230->190 step-5 tower: 9 bands, 90mm, 8 change entries', () => {
+    const range: TemperatureRange = { startTemp: 230, endTemp: 190, step: ORCA_TEMP_STEP_C };
+    expect(ORCA_BAND_HEIGHT_MM).toBe(10);
+    expect(bandCount(range)).toBe(9);
+    expect(towerHeightMm(range)).toBe(90); // matches the cut model's measured 90mm z-span
+    const bands = buildTemperatureBands(range, defaultTowerGeometry(0.2));
+    // 8 changes (band 1 stays at the config's start temp): 225@10 ... 190@80
+    expect(bands.map((b) => [b.topZ, b.temperature])).toEqual([
+      [10, 225], [20, 220], [30, 215], [40, 210], [50, 205], [60, 200], [70, 195], [80, 190]
+    ]);
+  });
+
+  it('defaultTowerGeometry uses the measured band/base = 10mm', () => {
+    expect(defaultTowerGeometry(0.2)).toEqual({ bandHeightMm: 10, baseHeightMm: 10, layerHeightMm: 0.2 });
   });
 });
 

@@ -15,10 +15,18 @@
 // and the material's temperature range; native assembly (wrapping the STL into a
 // project 3mf that embeds this XML plus the resolved config) is the next step.
 //
-// NOTE: the band GEOMETRY (band height, base height before the first change) is
-// a property of Orca's specific shipped tower model and must be confirmed by a
-// real slice before this is wired into `prepareProject`. The math and the XML
-// format here are model-agnostic and correct given those constants.
+// CONFIRMED from a real Orca temp-tower slice (Bambu H2S, PLA, OrcaSlicer 2.4.2,
+// 2026-07-26): a tower has one 10 mm band per temperature, stepping DOWN by 5 °C
+// from the filament's `nozzle_temperature` (e.g. 230→190 = 9 bands = 90 mm). Orca
+// itself emits `M104 S<temp> ; set nozzle temperature` on EVERY layer and cuts
+// its 370 mm master STL down to band-count × 10 mm. It does NOT store a
+// `custom_gcode_per_layer.xml`. PerfectFit reproduces the same temperatures the
+// robust way — one Custom (type=4) `M104` change at each band boundary in a
+// custom_gcode_per_layer.xml (the pa_pattern-proven injection path) — so a
+// normally-sliced project reaches the identical per-band temperatures without
+// depending on Orca's internal temp-tower recognition. `ORCA_BAND_HEIGHT_MM` /
+// `ORCA_TEMP_STEP_C` capture those measured constants; `defaultTowerGeometry`
+// and `towerHeightMm` feed both the generator and the (native) model cut.
 // ---------------------------------------------------------------------------
 
 /**
@@ -30,6 +38,12 @@ export const UNSET_EXTRUDER = -858993460;
 
 /** A Custom g-code per-layer entry (Orca `type="4"`). */
 export const CUSTOM_GCODE_TYPE = 4;
+
+/** Printed height of one temperature band, mm (measured: 50 layers × 0.2 mm). */
+export const ORCA_BAND_HEIGHT_MM = 10;
+
+/** Temperature decrement between adjacent bands, °C (measured: 5 °C). */
+export const ORCA_TEMP_STEP_C = 5;
 
 export interface TemperatureTowerGeometry {
   /** Printed height of each temperature band (mm). */
@@ -143,4 +157,37 @@ export function generateTemperatureTowerGcode(
 ): { bands: TemperatureBand[]; xml: string } {
   const bands = buildTemperatureBands(range, geometry);
   return { bands, xml: serializeCustomGcodePerLayer(bands) };
+}
+
+/**
+ * The tower geometry Orca uses (band + base = one 10 mm band at the start temp),
+ * for the given layer height. This is the geometry to pass to the generator and
+ * to size the model cut so the printed bands line up with the temperature
+ * changes.
+ */
+export function defaultTowerGeometry(layerHeightMm = 0.2): TemperatureTowerGeometry {
+  return {
+    bandHeightMm: ORCA_BAND_HEIGHT_MM,
+    baseHeightMm: ORCA_BAND_HEIGHT_MM,
+    layerHeightMm
+  };
+}
+
+/** Number of temperature bands for a range (inclusive of start and end). */
+export function bandCount(range: TemperatureRange): number {
+  if (range.step <= 0) throw new Error('TEMP_TOWER: step must be positive');
+  if (range.startTemp < range.endTemp) throw new Error('TEMP_TOWER: startTemp must be >= endTemp');
+  return Math.floor((range.startTemp - range.endTemp) / range.step) + 1;
+}
+
+/**
+ * Printed height (mm) the tower model must have for a range — `bandCount` bands
+ * of `bandHeightMm`. Orca cuts its 370 mm master STL to exactly this; the native
+ * assembler must cut to the same height so bands align with the temperatures.
+ */
+export function towerHeightMm(
+  range: TemperatureRange,
+  geometry: TemperatureTowerGeometry = defaultTowerGeometry()
+): number {
+  return bandCount(range) * geometry.bandHeightMm;
 }

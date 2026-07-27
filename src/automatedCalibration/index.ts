@@ -134,8 +134,13 @@ export {
   buildTemperatureBands,
   serializeCustomGcodePerLayer,
   generateTemperatureTowerGcode,
+  defaultTowerGeometry,
+  bandCount,
+  towerHeightMm,
   UNSET_EXTRUDER,
-  CUSTOM_GCODE_TYPE
+  CUSTOM_GCODE_TYPE,
+  ORCA_BAND_HEIGHT_MM,
+  ORCA_TEMP_STEP_C
 } from './temperatureTower';
 export type {
   TemperatureBand,
