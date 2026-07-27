@@ -1,16 +1,20 @@
 // ---------------------------------------------------------------------------
-// Automated Calibration Pipeline — UI entry screen (Stage 7, increment 1).
+// Automated Calibration Pipeline — UI entry screen (Stage 7).
 //
 // Reachable at #/automated/:id, gated behind the `automatedCalibration`
 // experimental flag (also linked from the project page when the flag is on).
-// This increment covers: engine detection/status, and starting an automated
-// session for a project using the printer + material the user already chose
-// manually — no new printer/material picker is needed for that, since a
+//
+// increment 1: engine detection/status, and starting an automated session for
+// a project using the printer + material the user already chose manually —
+// no new printer/material picker is needed for that, since a
 // CalibrationProject already carries `printerProfileId`/nozzle/`filament`.
 //
-// Preparing + slicing individual steps is a later increment; this screen
-// shows the ordered, slice-needing steps and their readiness so the shape of
-// what's coming is visible, without wiring the prepare/slice actions yet.
+// increment 2: the actual per-step prepare → slice → review loop. Recording
+// the MEASURED result (what the user observed on the physical print) is
+// deliberately NOT reimplemented here — that's identical to the manual
+// workflow's existing result-entry step regardless of how the test was
+// sliced, so a successful slice links straight to `#/wizard/:id/:step`
+// instead of duplicating that UI.
 // ---------------------------------------------------------------------------
 
 import { h, clear, toast } from './dom';
@@ -29,7 +33,9 @@ import {
   getStepDefinition,
   type EngineStatus,
   type PrinterSelection,
-  type AutomatedCalibrationSession
+  type AutomatedCalibrationSession,
+  type CalibrationStepDefinition,
+  type ResolvedPrinterPreset
 } from '../automatedCalibration';
 
 export async function renderAutomated(root: HTMLElement, id: string): Promise<void> {
@@ -57,6 +63,18 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
     await saveProject(p);
     load.warnings.forEach(w => toast(w, 'error'));
   }
+
+  const printer = await getPrinter(p.printerProfileId);
+  const mat = getMaterial(p.filament.material);
+  // PrinterSelection.printerProfileId is the STATIC printer-database id
+  // (PrinterSpecification.id, e.g. "bambu-lab-x1-carbon") that resolveForMaterial
+  // looks up via getPrinterSpec — NOT this saved PrinterProfile's own IndexedDB
+  // uuid. Only printers created from (or since re-matched to) the database
+  // carry that link; a hand-entered printer has no database counterpart to map
+  // to an installed Orca machine preset.
+  const selection: PrinterSelection | null = printer?.databasePrinterId
+    ? { printerProfileId: printer.databasePrinterId, nozzleDiameterMm: printer.nozzleDiameter, slicer: p.slicer.slicer }
+    : null;
 
   root.append(
     h('h1', {}, '🤖 Automated calibration'),
@@ -94,9 +112,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   root.append(sessionCard);
 
   if (!load.automated) {
-    const printer = await getPrinter(p.printerProfileId);
-    const mat = getMaterial(p.filament.material);
-    const canStart = diag.recommendedEngineId === 'installed_orca' && !!printer;
+    const canStart = diag.recommendedEngineId === 'installed_orca' && !!selection;
 
     sessionCard.append(h('div', {},
       h('h2', { style: 'margin-top:0' }, 'Start an automated session'),
@@ -104,18 +120,15 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
         h('strong', {}, printer ? `${printer.name} · ${printer.nozzleDiameter} mm` : 'no printer profile set'),
         ` · `, h('strong', {}, mat.label), '.'),
       !printer ? h('p', { class: 'callout callout-warn' }, 'This project has no printer profile — set one on the project page first.') : null,
+      printer && !selection ? h('p', { class: 'callout callout-warn' },
+        'This printer profile isn’t linked to PerfectFit’s printer database, so it can’t be matched to an installed OrcaSlicer machine preset yet. Re-select it from the database on the Printers page (or add it there) to enable automated calibration.') : null,
       diag.recommendedEngineId !== 'installed_orca'
         ? h('p', { class: 'callout callout-warn' }, 'No usable OrcaSlicer install was detected — install OrcaSlicer 2.4.x, or select its executable, then re-check above.')
         : null,
       h('div', { class: 'btn-row' },
         h('button', {
           class: 'btn btn-primary', disabled: !canStart, onClick: async () => {
-            if (!printer) return;
-            const selection: PrinterSelection = {
-              printerProfileId: p.printerProfileId,
-              nozzleDiameterMm: printer.nozzleDiameter,
-              slicer: p.slicer.slicer
-            };
+            if (!selection || !printer) return;
             try {
               const resolved = await engine.resolveForMaterial(selection, p.filament.material);
               const workingProfile = buildWorkingProfile({
@@ -158,18 +171,37 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
       : null
   ));
 
-  // --- workflow steps preview (prepare/slice actions land in a later increment) ---
+  // --- workflow steps: prepare + slice each one, in place ---
+  const canSlice = diag.recommendedEngineId === 'installed_orca' && !!selection;
   const sliceableSteps = orderWorkflow(p.stepOrder).filter(sid => getStepDefinition(sid).needsSlicing);
   const stepsCard = h('div', { class: 'card' },
     h('h2', { style: 'margin-top:0' }, 'Steps this pipeline can slice for you'));
+  if (!canSlice) {
+    stepsCard.append(h('p', { class: 'callout callout-warn' },
+      'No usable OrcaSlicer install was detected above — install OrcaSlicer 2.4.x, or select its executable, then re-check.'));
+  }
   if (!sliceableSteps.length) {
     stepsCard.append(h('p', { class: 'field-help' }, 'No steps in this project’s workflow support automated slicing yet.'));
   }
   for (const sid of sliceableSteps) {
     const def = getCalibration(sid);
+    const stepDef = getStepDefinition(sid);
     const readiness = stepReadiness(workingProfile, sid);
     const st = p.steps[sid];
     const done = st?.status === 'completed';
+    const resultBox = h('div', {});
+    const runBtn = h('button', {
+      class: 'btn btn-sm btn-primary',
+      disabled: !canSlice || !readiness.ready,
+      onClick: async () => {
+        if (!selection || !printer) return;
+        (runBtn as HTMLButtonElement).disabled = true;
+        await prepareAndSlice({ engine, session, selection, material: p.filament.material, stepDef, resultBox });
+        await saveProject(p);
+        (runBtn as HTMLButtonElement).disabled = false;
+      }
+    }, '▶ Prepare & slice') as HTMLButtonElement;
+
     stepsCard.append(h('div', { class: 'eval-item' },
       h('div', { class: 'eval-icon', 'aria-hidden': 'true' }, def.icon),
       h('div', { style: 'flex:1' },
@@ -179,12 +211,68 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
           h('span', { class: 'badge badge-info' }, 'needs earlier steps first')),
         !readiness.ready && !done
           ? h('p', { class: 'field-help' }, `Waiting on: ${readiness.missingInputs.join(', ')}`)
-          : null
-      )
+          : null,
+        resultBox
+      ),
+      done ? h('a', { class: 'btn btn-sm', href: `#/wizard/${p.id}/${sid}` }, 'Review / redo') : runBtn
     ));
   }
   root.append(stepsCard);
-  root.append(h('p', { class: 'field-help' }, 'Preparing and slicing individual steps lands in the next increment.'));
+}
+
+/** Prepare a step's project, slice it, and render the outcome into `resultBox`
+ *  in place. Never throws — every failure is rendered as a callout. */
+async function prepareAndSlice(args: {
+  engine: InstalledOrcaEngine;
+  session: AutomatedCalibrationSession;
+  selection: PrinterSelection;
+  material: AutomatedCalibrationSession['filament']['material'];
+  stepDef: CalibrationStepDefinition;
+  resultBox: HTMLElement;
+}): Promise<void> {
+  const { engine, session, selection, material, stepDef, resultBox } = args;
+  clear(resultBox);
+  resultBox.append(h('p', { class: 'field-help' }, '⏳ Resolving your printer + preparing the project…'));
+  let resolved: ResolvedPrinterPreset;
+  try {
+    resolved = await engine.resolveForMaterial(selection, material);
+  } catch (err) {
+    clear(resultBox);
+    resultBox.append(h('p', { class: 'callout callout-bad' }, describeResolveError(err)));
+    return;
+  }
+
+  let prepared;
+  try {
+    prepared = await engine.prepareProject(session, stepDef, resolved);
+  } catch (err) {
+    clear(resultBox);
+    resultBox.append(h('p', { class: 'callout callout-bad' }, describePrepareError(err)));
+    return;
+  }
+
+  clear(resultBox);
+  resultBox.append(h('p', { class: 'field-help' }, '⏳ Slicing…'));
+  const job = await engine.slice(prepared, { outputDir: prepared.workspaceDir, timeoutMs: 300_000 });
+  const inspection = await engine.inspectOutput(job);
+  clear(resultBox);
+
+  if (job.succeeded) {
+    resultBox.append(h('div', { class: 'callout callout-ok' },
+      h('p', {}, `✓ Sliced in ${(job.durationMs / 1000).toFixed(1)}s.`),
+      job.outputGcodePath ? h('p', { class: 'field-help' }, job.outputGcodePath) : null,
+      inspection.findings.length ? h('ul', {}, inspection.findings.map(f => h('li', {}, f))) : null,
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn btn-primary btn-sm', href: `#/wizard/${session.id}/${stepDef.id}` },
+          '→ Print it, then record your result'))
+    ));
+  } else {
+    resultBox.append(h('div', { class: 'callout callout-bad' },
+      h('p', {}, `✖ Slicing did not succeed (exit code ${job.exitCode ?? 'unknown'}).`),
+      job.logPath ? h('p', { class: 'field-help' }, `Engine log: ${job.logPath}`) : null,
+      inspection.findings.length ? h('ul', {}, inspection.findings.map(f => h('li', {}, f))) : null
+    ));
+  }
 }
 
 function engineStatusRow(e: EngineStatus): HTMLElement {
@@ -207,5 +295,13 @@ function describeResolveError(err: unknown): string {
   if (msg.includes('PRINTER_NOT_IN_ORCA')) return 'This printer/nozzle isn’t installed in OrcaSlicer as a machine preset.';
   if (msg.includes('FILAMENT_NOT_FOUND')) return 'No installed OrcaSlicer filament preset matches this material for this printer.';
   if (msg.includes('PRINTER_NOT_FOUND')) return 'This project’s printer profile could not be found.';
-  return `Could not start the session: ${msg}`;
+  return `Could not resolve your printer: ${msg}`;
+}
+
+function describePrepareError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('UNSUPPORTED_ASSET')) return 'This test doesn’t support automated preparation yet.';
+  if (msg.includes('ASSET_UNAVAILABLE')) return 'The calibration model for this test couldn’t be found in your OrcaSlicer install.';
+  if (msg.includes('ENGINE_NOT_DETECTED')) return 'OrcaSlicer isn’t detected — re-check the slicing engine above.';
+  return `Could not prepare this test: ${msg}`;
 }
