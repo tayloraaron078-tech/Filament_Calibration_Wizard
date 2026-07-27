@@ -81,6 +81,21 @@ export interface AssembleProjectArgs {
   outputFileName: string;
 }
 
+export interface AssembleTowerArgs {
+  engineId: EngineId;
+  sessionId: string;
+  jobId: string;
+  /** Source calibration STL (under the user's Orca install). */
+  stlPath: string;
+  /** Height to cut the master tower to (band-count × band height, mm). */
+  towerHeightMm: number;
+  /** The merged project_settings.config text to embed. */
+  mergedConfigJson: string;
+  /** Generated per-band custom_gcode_per_layer.xml (empty string to omit). */
+  customGcodeXml: string;
+  outputFileName: string;
+}
+
 export interface RawResolvedPreset {
   /** Flat combined settings, JSON-serialized (shaped like project_settings.config). */
   settings_json: string;
@@ -134,6 +149,9 @@ export interface EngineNativeBridge {
   readProjectConfig(templatePath: string): Promise<string>;
   /** Stage a complete project 3mf (template + merged config) into the job. */
   assembleCalibrationProject(args: AssembleProjectArgs): Promise<RawAssembledProject>;
+  /** Stage a temperature-tower project (STL cut to height + merged config +
+   *  per-band custom g-code) into the job. */
+  assembleTemperatureTower(args: AssembleTowerArgs): Promise<RawAssembledProject>;
   /** Resolve an Orca printer/process/filament selection (by exact preset names)
    *  into a flat project_settings.config via the vendor `inherits` chains. */
   resolvePresetByNames(args: ResolvePresetArgs): Promise<RawResolvedPreset>;
@@ -204,6 +222,18 @@ export const nativeEngineBridge: EngineNativeBridge = {
       jobId: args.jobId,
       templatePath: args.templatePath,
       mergedConfigJson: args.mergedConfigJson,
+      outputFileName: args.outputFileName
+    });
+  },
+  assembleTemperatureTower(args) {
+    return invoke<RawAssembledProject>('assemble_temperature_tower', {
+      engineId: args.engineId,
+      sessionId: args.sessionId,
+      jobId: args.jobId,
+      stlPath: args.stlPath,
+      towerHeightMm: args.towerHeightMm,
+      mergedConfigJson: args.mergedConfigJson,
+      customGcodeXml: args.customGcodeXml,
       outputFileName: args.outputFileName
     });
   },

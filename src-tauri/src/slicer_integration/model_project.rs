@@ -16,6 +16,8 @@
 //!
 //! Reads only the caller-provided model bytes; writes only the output project.
 
+use super::project_assembly::RawAssembledProject;
+use super::{engine, security};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -346,6 +348,70 @@ pub fn assemble_model_project(
     }
     w.finish().map_err(|e| format!("Zip finalize failed: {e}"))?;
     Ok(entries.len())
+}
+
+/// Assemble a temperature-tower project into the job workspace: read the shipped
+/// `temperature_tower.stl` from the vetted install, cut it to `tower_height_mm`
+/// (as Orca does — band-count × 10 mm), and package it with the merged config and
+/// the generated per-band `custom_gcode_per_layer.xml`. Output lands at
+/// `sessions/<session>/jobs/<job>/workspace/<output_file_name>`.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn assemble_temperature_tower(
+    engine_id: String,
+    session_id: String,
+    job_id: String,
+    stl_path: String,
+    tower_height_mm: f64,
+    merged_config_json: String,
+    custom_gcode_xml: String,
+    output_file_name: String,
+) -> Result<RawAssembledProject, String> {
+    security::validate_component(&output_file_name)?;
+    if !output_file_name.to_ascii_lowercase().ends_with(".3mf") {
+        return Err("Output file must be a .3mf".into());
+    }
+    if !(tower_height_mm.is_finite() && tower_height_mm > 0.0) {
+        return Err("tower_height_mm must be a positive number".into());
+    }
+    let stl = std::fs::canonicalize(&stl_path).map_err(|e| format!("Cannot resolve STL {stl_path}: {e}"))?;
+
+    // Confine the model to the vetted engine's own resources when resolvable — a
+    // calibration model must come from the user's own install, never an arbitrary
+    // frontend path (same rule as project_assembly).
+    let mut warnings = Vec::new();
+    if engine_id == "installed_orca" {
+        match engine::engine_resources_root(&engine_id) {
+            Some(root) => security::ensure_under(&root, &stl)?,
+            None => warnings.push("Engine resources root unknown; STL not confined to the install.".into()),
+        }
+    }
+
+    let master = parse_binary_stl(&std::fs::read(&stl).map_err(|e| format!("Cannot read STL: {e}"))?)?;
+    let (min, _max) = master.bounds();
+    let mesh = cut_below_z(&master, min[2] + tower_height_mm);
+    if mesh.triangles.is_empty() {
+        return Err("Cut produced an empty mesh — tower_height_mm too small?".into());
+    }
+
+    let workspace = security::job_root(&session_id, &job_id)?.join("workspace");
+    std::fs::create_dir_all(&workspace).map_err(|e| format!("Cannot create workspace: {e}"))?;
+    let out_path = workspace.join(&output_file_name);
+    let gcode = if custom_gcode_xml.trim().is_empty() {
+        None
+    } else {
+        Some(custom_gcode_xml.as_str())
+    };
+    let entry_count = assemble_model_project(&out_path, &mesh, "TemperatureTower", &merged_config_json, gcode)?;
+
+    Ok(RawAssembledProject {
+        project_file_name: output_file_name,
+        project_path: out_path.display().to_string(),
+        workspace_dir: workspace.display().to_string(),
+        config_replaced: true,
+        entry_count,
+        warnings,
+    })
 }
 
 #[cfg(test)]

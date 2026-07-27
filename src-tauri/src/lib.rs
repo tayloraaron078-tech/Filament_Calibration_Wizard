@@ -1,7 +1,8 @@
 pub mod slicer_integration;
 
 use slicer_integration::{
-  backup, discovery, engine, filesystem, install, preset_resolver, processes, project_assembly,
+  backup, discovery, engine, filesystem, install, model_project, preset_resolver, processes,
+  project_assembly,
 };
 
 /// Remove service-worker registrations and HTTP caches left behind by previous
@@ -87,6 +88,7 @@ pub fn run() {
       preset_resolver::resolve_printer_preset,
       preset_resolver::list_installed_machines,
       preset_resolver::list_vendor_filaments,
+      model_project::assemble_temperature_tower,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

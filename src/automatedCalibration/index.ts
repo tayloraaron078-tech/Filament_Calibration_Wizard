@@ -88,6 +88,7 @@ export type {
   RunSliceArgs,
   RawAssembledProject,
   AssembleProjectArgs,
+  AssembleTowerArgs,
   RawResolvedPreset,
   ResolvePresetArgs,
   RawMachinePreset,

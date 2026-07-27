@@ -15,7 +15,8 @@ import type {
   RawEngineDetection,
   RawSliceRun,
   RunSliceArgs,
-  AssembleProjectArgs
+  AssembleProjectArgs,
+  AssembleTowerArgs
 } from '../../src/automatedCalibration';
 import type { PreparedCalibrationProject, AutomatedCalibrationSession } from '../../src/automatedCalibration';
 
@@ -95,6 +96,7 @@ function fakeBridge(overrides: Partial<EngineNativeBridge> = {}): EngineNativeBr
     cancelCalibrationSlice: async () => true,
     readProjectConfig: async () => TEMPLATE_CONFIG,
     assembleCalibrationProject: async () => ASSEMBLED,
+    assembleTemperatureTower: async () => ASSEMBLED,
     resolvePresetByNames: async () => RESOLVED_PRESET,
     listInstalledMachines: async () => INSTALLED_MACHINES,
     listVendorFilaments: async () => INSTALLED_FILAMENTS,
@@ -507,10 +509,10 @@ describe('InstalledOrcaEngine.prepareProject', () => {
     expect(merged.pressure_advance).toEqual(['0.03']);
   });
 
-  it('rejects a step that needs parameterized generation (bare model)', async () => {
+  it('rejects a step that still needs parameterized generation (flow)', async () => {
     const engine = new InstalledOrcaEngine(fakeBridge());
     await engine.detect();
-    const step = getStepDefinition('temperature')!;
+    const step = getStepDefinition('flow-pass1')!;
     await expect(engine.prepareProject(paSession(), step)).rejects.toThrow(/UNSUPPORTED_ASSET/);
   });
 
@@ -518,6 +520,70 @@ describe('InstalledOrcaEngine.prepareProject', () => {
     const engine = new InstalledOrcaEngine(fakeBridge({ isDesktop: () => false }));
     const step = getStepDefinition('pressure-advance')!;
     await expect(engine.prepareProject(paSession(), step)).rejects.toThrow(/NOT_DESKTOP/);
+  });
+});
+
+// --- InstalledOrcaEngine.prepareProject (temperature tower, STL) -------------
+
+function tempSession(): AutomatedCalibrationSession {
+  const wp = buildWorkingProfile({ projectId: 'sess-1', displayName: 'w' });
+  return {
+    id: 'sess-1',
+    filament: { material: 'PLA', manufacturer: '', productLine: '', color: '', diameter: 1.75, startingProfile: '' },
+    workingProfile: wp,
+    steps: {},
+    finals: {}
+  } as unknown as AutomatedCalibrationSession;
+}
+
+const RESOLVED_FOR_TOWER = {
+  settings: {
+    printer_settings_id: 'Bambu Lab X1 Carbon 0.4 nozzle',
+    layer_height: '0.2',
+    nozzle_temperature: ['200', '200'],
+    nozzle_temperature_initial_layer: ['200', '200']
+  } as Record<string, unknown>,
+  printerModel: 'Bambu Lab X1 Carbon',
+  printerSettingsId: 'Bambu Lab X1 Carbon 0.4 nozzle',
+  source: 'vendor_profile' as const,
+  warnings: []
+};
+
+describe('InstalledOrcaEngine.prepareProject (temperature tower)', () => {
+  it('cuts to the material band count, sets start temp, and injects per-band M104', async () => {
+    let captured: AssembleTowerArgs | null = null;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        assembleTemperatureTower: async (a) => {
+          captured = a;
+          return ASSEMBLED;
+        }
+      })
+    );
+    await engine.detect();
+    const step = getStepDefinition('temperature')!;
+    const prepared = await engine.prepareProject(tempSession(), step, RESOLVED_FOR_TOWER);
+
+    expect(prepared.stepId).toBe('temperature');
+    expect(prepared.projectFilePath).toContain('project.3mf');
+    expect(captured).not.toBeNull();
+    // PLA towerRange 230->190 step 5 => 9 bands => 90mm
+    expect(captured!.towerHeightMm).toBe(90);
+    expect(captured!.stlPath).toContain('temperature_tower.stl');
+    // per-band changes injected: 225 at the first boundary, 190 at the top
+    expect(captured!.customGcodeXml).toContain('M104 S225');
+    expect(captured!.customGcodeXml).toContain('M104 S190');
+    // start temp (230) written into both temperature keys, per-slot length kept
+    const cfg = JSON.parse(captured!.mergedConfigJson);
+    expect(cfg.nozzle_temperature).toEqual(['230', '230']);
+    expect(cfg.nozzle_temperature_initial_layer).toEqual(['230', '230']);
+  });
+
+  it('requires a resolved preset (the STL carries no config)', async () => {
+    const engine = new InstalledOrcaEngine(fakeBridge());
+    await engine.detect();
+    const step = getStepDefinition('temperature')!;
+    await expect(engine.prepareProject(tempSession(), step)).rejects.toThrow(/RESOLVED_PRESET_REQUIRED/);
   });
 });
 

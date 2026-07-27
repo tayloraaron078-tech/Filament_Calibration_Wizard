@@ -34,7 +34,12 @@ import type { EngineStatus } from '../engineRegistry';
 import { getAsset, resolveAsset } from '../assets';
 import { inputFingerprintForStep } from '../workflow';
 import { workspaceDirName } from '../projectPreparation';
-import { mergeCalibrationIntoConfig, mergeCalibrationIntoProjectConfig } from '../orcaProjectConfig';
+import {
+  mergeCalibrationIntoConfig,
+  mergeCalibrationIntoProjectConfig,
+  parseProjectConfig,
+  serializeProjectConfig
+} from '../orcaProjectConfig';
 import { mapPrinterToOrca, type OrcaMachineMapping } from '../printerMapping';
 import {
   fromRawFilament,
@@ -42,7 +47,13 @@ import {
   type FilamentSelectionOptions,
   type OrcaFilamentPreset
 } from '../filamentSelection';
+import {
+  defaultTowerGeometry,
+  generateTemperatureTowerGcode,
+  towerHeightMm
+} from '../temperatureTower';
 import { getPrinterSpec } from '../../data/printerDatabase';
+import { getMaterial } from '../../data/materials';
 import type { MaterialId } from '../../types';
 import {
   baseName,
@@ -301,10 +312,11 @@ export class InstalledOrcaEngine implements SlicingEngine {
    * the template's own embedded config is used — correct only when the user
    * prints on the template's printer, so a warning is recorded.
    *
-   * Narrow support in this increment — only steps whose asset is already a
-   * complete project (`project-template`, e.g. the pressure-advance pattern).
-   * Bare-model steps (temperature/flow towers) need parameterized project
-   * generation and are the next increment.
+   * Two asset kinds are supported: complete projects (`project-template`, e.g. the
+   * pressure-advance pattern — config swap) and the parameterized temperature
+   * tower (`stl` — the master STL is cut to the material's band count and the
+   * per-band temperatures are injected as custom g-code). Other bare-model steps
+   * (flow) still need their own generation and reject clearly.
    */
   async prepareProject(
     session: AutomatedCalibrationSession,
@@ -318,11 +330,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     if (!exe) throw new Error('ENGINE_NOT_DETECTED: detect the engine before preparing a project.');
 
     const asset = getAsset(step.id);
-    if (!asset || asset.assetType !== 'project-template') {
-      throw new Error(
-        `UNSUPPORTED_ASSET: '${step.id}' needs parameterized project generation, not yet available.`
-      );
-    }
+    if (!asset) throw new Error(`UNSUPPORTED_ASSET: no calibration asset registered for '${step.id}'.`);
     const resolved = resolveAsset(step.id, { slicerResourceRoot: resourcesRootFromExe(exe) });
     if (!resolved.available || !resolved.location) {
       throw new Error(`ASSET_UNAVAILABLE: ${resolved.remedy ?? step.id}`);
@@ -330,6 +338,16 @@ export class InstalledOrcaEngine implements SlicingEngine {
 
     const fingerprint = inputFingerprintForStep(session.workingProfile, step.id);
     const jobId = workspaceDirName(session.id, step.id, fingerprint);
+
+    if (step.id === 'temperature' && asset.assetType === 'stl') {
+      return this.prepareTemperatureTower(session, step, resolved.location, resolvedPreset, jobId);
+    }
+    if (asset.assetType !== 'project-template') {
+      throw new Error(
+        `UNSUPPORTED_ASSET: '${step.id}' needs parameterized project generation, not yet available.`
+      );
+    }
+
     // Base config: the user's resolved printer when available, else the
     // template's own (template geometry is used either way — only the config
     // entry is swapped, which a real Orca slice was proven to accept).
@@ -345,9 +363,65 @@ export class InstalledOrcaEngine implements SlicingEngine {
       outputFileName: 'project.3mf'
     });
 
+    return this.preparedFrom(assembled, session.id, step, jobId);
+  }
+
+  /**
+   * Prepare a temperature-tower project: the material's `towerRange` sets the
+   * band temperatures, the resolved printer config is the base (with its start
+   * temperature set so the first band is correct), the master STL is cut to the
+   * band count natively, and the per-band `M104` changes are injected as custom
+   * g-code. A resolved printer preset is REQUIRED — the STL carries no config.
+   */
+  private async prepareTemperatureTower(
+    session: AutomatedCalibrationSession,
+    step: CalibrationStepDefinition,
+    stlPath: string,
+    resolvedPreset: ResolvedPrinterPreset | undefined,
+    jobId: string
+  ): Promise<PreparedCalibrationProject> {
+    if (!resolvedPreset) {
+      throw new Error(
+        'RESOLVED_PRESET_REQUIRED: the temperature tower has no embedded config; ' +
+          'resolve the printer+material first (resolveForMaterial) and pass the preset.'
+      );
+    }
+    const tower = getMaterial(session.filament.material).towerRange;
+    const range = { startTemp: tower.start, endTemp: tower.end, step: tower.step };
+    const layerHeight = firstNumber(resolvedPreset.settings.layer_height) ?? 0.2;
+    const geometry = defaultTowerGeometry(layerHeight);
+    const { xml } = generateTemperatureTowerGcode(range, geometry);
+    const height = towerHeightMm(range, geometry);
+
+    // Base config = resolved printer + calibrated values, with the start
+    // temperature set so band 1 (which has no injected change) prints hot.
+    const merged = mergeCalibrationIntoConfig(resolvedPreset.settings, session);
+    const config = parseProjectConfig(merged.text);
+    setStartTemperature(config, range.startTemp);
+
+    const assembled = await this.bridge.assembleTemperatureTower({
+      engineId: ENGINE_ID,
+      sessionId: session.id,
+      jobId,
+      stlPath,
+      towerHeightMm: height,
+      mergedConfigJson: serializeProjectConfig(config),
+      customGcodeXml: xml,
+      outputFileName: 'project.3mf'
+    });
+    return this.preparedFrom(assembled, session.id, step, jobId);
+  }
+
+  /** Build the PreparedCalibrationProject record from a native assembly result. */
+  private preparedFrom(
+    assembled: { workspace_dir: string; project_path: string },
+    sessionId: string,
+    step: CalibrationStepDefinition,
+    jobId: string
+  ): PreparedCalibrationProject {
     return {
       id: jobId,
-      projectId: session.id,
+      projectId: sessionId,
       stepId: step.id,
       workspaceDir: assembled.workspace_dir,
       projectFilePath: assembled.project_path,
@@ -402,5 +476,30 @@ export class InstalledOrcaEngine implements SlicingEngine {
 
   async inspectOutput(job: SlicedCalibrationJob): Promise<SlicedJobInspection> {
     return inspectSlicedJob(job);
+  }
+}
+
+/** First numeric value of a config field that may be a number, a string, or an
+ *  array of strings (Orca stores process scalars as strings, filament values as
+ *  arrays). Returns null when it can't be parsed. */
+function firstNumber(v: unknown): number | null {
+  const one = Array.isArray(v) ? v[0] : v;
+  if (typeof one === 'number') return Number.isFinite(one) ? one : null;
+  if (typeof one === 'string') {
+    const n = Number.parseFloat(one);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/** Set the hotend start temperature in a project config so the first (unchanged)
+ *  temperature-tower band prints at it. Writes both the running and initial-layer
+ *  keys, preserving the existing per-slot array length (or a single slot). */
+function setStartTemperature(config: Record<string, unknown>, temp: number): void {
+  const value = String(temp);
+  for (const key of ['nozzle_temperature', 'nozzle_temperature_initial_layer']) {
+    const existing = config[key];
+    config[key] =
+      Array.isArray(existing) && existing.length > 0 ? existing.map(() => value) : [value];
   }
 }
