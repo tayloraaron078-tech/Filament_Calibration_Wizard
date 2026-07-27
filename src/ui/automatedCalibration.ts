@@ -15,9 +15,14 @@
 // workflow's existing result-entry step regardless of how the test was
 // sliced, so a successful slice links straight to `#/wizard/:id/:step`
 // instead of duplicating that UI.
+//
+// increment 3: surfaces a resumable session from the dashboard (see
+// dashboard.ts), and lets the user cancel a session in progress. A
+// cancelled/failed session's steps card is replaced with a restart prompt
+// (beginSession again); a completed session just points back at the project.
 // ---------------------------------------------------------------------------
 
-import { h, clear, toast } from './dom';
+import { h, clear, toast, confirmDialog } from './dom';
 import { getProject, getPrinter, saveProject } from '../storage/store';
 import { getCalibration } from '../data/calibrations';
 import { getMaterial } from '../data/materials';
@@ -28,6 +33,7 @@ import {
   beginSession,
   buildWorkingProfile,
   loadSessionSafe,
+  cancelSession,
   stepReadiness,
   orderWorkflow,
   getStepDefinition,
@@ -160,6 +166,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
     created: 'Created', in_progress: 'In progress', waiting_for_print: 'Waiting for print',
     waiting_for_result: 'Waiting for result', completed: 'Completed', cancelled: 'Cancelled', failed: 'Failed'
   };
+  const terminal = status === 'completed' || status === 'cancelled' || status === 'failed';
   sessionCard.append(h('div', {},
     h('h2', { style: 'margin-top:0' }, 'Session'),
     h('p', {},
@@ -168,8 +175,61 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
       ` · ${workingProfile.displayName}`),
     session.sessionWarnings?.length
       ? h('ul', {}, session.sessionWarnings.map(w => h('li', { class: 'field-help' }, w.message)))
-      : null
+      : null,
+    !terminal ? h('div', { class: 'btn-row' },
+      h('button', {
+        class: 'btn btn-sm btn-danger', onClick: async () => {
+          const ok = await confirmDialog({
+            title: 'Cancel this automated session?',
+            body: 'Any test you already prepared/sliced stays on disk, but the session stops here. Your recorded calibration results are never affected — you can still finish this project manually, or start a new automated session later.',
+            confirmLabel: 'Cancel session', danger: true
+          });
+          if (!ok) return;
+          cancelSession(p);
+          await saveProject(p);
+          toast('Automated session cancelled.', 'info');
+          await rerender();
+        }
+      }, '✖ Cancel session')
+    ) : null
   ));
+
+  if (status === 'cancelled' || status === 'failed') {
+    root.append(h('div', { class: 'card' },
+      h('p', { class: 'callout callout-warn' },
+        `This session was ${status}. Starting a new one uses the same printer and material and begins fresh.`),
+      h('div', { class: 'btn-row' },
+        h('button', {
+          class: 'btn btn-primary', disabled: !selection || !printer, onClick: async () => {
+            if (!selection || !printer) return;
+            try {
+              const resolved = await engine.resolveForMaterial(selection, p.filament.material);
+              const newProfile = buildWorkingProfile({
+                projectId: p.id,
+                displayName: `${mat.label} · ${printer.name}`,
+                sourceProfileName: resolved.printerSettingsId ?? undefined
+              });
+              beginSession(p, { slicerMode: 'installed_orca', engineId: 'installed_orca', workingProfile: newProfile });
+              await saveProject(p);
+              toast('New automated session started.', 'success');
+              await rerender();
+            } catch (err) {
+              toast(describeResolveError(err), 'error');
+            }
+          }
+        }, '▶ Start a new session')
+      )
+    ));
+    return;
+  }
+
+  if (status === 'completed') {
+    root.append(h('div', { class: 'card' },
+      h('p', { class: 'callout callout-ok' }, 'This automated session is complete.'),
+      h('a', { class: 'btn btn-primary', href: `#/project/${p.id}` }, '← Back to project')
+    ));
+    return;
+  }
 
   // --- workflow steps: prepare + slice each one, in place ---
   const canSlice = diag.recommendedEngineId === 'installed_orca' && !!selection;
