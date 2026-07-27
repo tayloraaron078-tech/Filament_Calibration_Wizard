@@ -42,6 +42,7 @@ import {
   buildWorkingProfile,
   loadSessionSafe,
   cancelSession,
+  completeSession,
   stepReadiness,
   orderWorkflow,
   getStepDefinition,
@@ -55,6 +56,7 @@ import {
   type RawFilamentPreset
 } from '../automatedCalibration';
 import type { MaterialId } from '../types';
+import { buildPatchesFromProject } from '../slicerIntegration/generator';
 
 export async function renderAutomated(root: HTMLElement, id: string): Promise<void> {
   const p = await getProject(id);
@@ -244,9 +246,18 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   }
 
   if (status === 'completed') {
+    const finishPatches = buildPatchesFromProject(p);
     root.append(h('div', { class: 'card' },
       h('p', { class: 'callout callout-ok' }, 'This automated session is complete.'),
-      h('a', { class: 'btn btn-primary', href: `#/project/${p.id}` }, '← Back to project')
+      finishPatches.length
+        ? h('p', { class: 'field-help' },
+            'You can still generate or re-install a tuned filament profile from your recorded results.')
+        : null,
+      h('div', { class: 'btn-row' },
+        finishPatches.length
+          ? h('a', { class: 'btn btn-primary', href: `#/profile/${p.id}` }, '🧵 Create / install tuned profile')
+          : null,
+        h('a', { class: 'btn btn-ghost', href: `#/project/${p.id}` }, '← Back to project'))
     ));
     return;
   }
@@ -303,6 +314,41 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
     ));
   }
   root.append(stepsCard);
+
+  // --- finish: hand off to the (existing, verified) profile generator/installer ---
+  // The automated session IS a CalibrationProject, and recording each measured
+  // result writes project.finals — exactly what the profile wizard consumes. So
+  // once at least one calibrated value is recorded, offer to generate & install
+  // a tuned filament profile via the same machinery the manual flow uses, rather
+  // than reimplementing the installer here.
+  const finishPatches = buildPatchesFromProject(p);
+  if (finishPatches.length) {
+    root.append(h('div', { class: 'card' },
+      h('h2', { style: 'margin-top:0' }, 'Finish calibration'),
+      h('p', {},
+        `You’ve recorded ${finishPatches.length} calibrated value${finishPatches.length === 1 ? '' : 's'}. `,
+        'Generate a tuned filament profile you can install into your slicer — nothing in your existing presets changes until you choose to install.'),
+      h('ul', { class: 'field-help' },
+        finishPatches.map(pt => h('li', {}, `${pt.label}: `, h('strong', {}, `${pt.value}${pt.unit ? ` ${pt.unit}` : ''}`)))),
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn btn-primary', href: `#/profile/${p.id}` }, '🧵 Create & install tuned profile'),
+        h('button', {
+          class: 'btn btn-sm', onClick: async () => {
+            const ok = await confirmDialog({
+              title: 'Mark this automated session complete?',
+              body: 'This closes the automated session. Your recorded results and any generated profile are kept — you can still create or re-install a profile afterward, and you can always start a new session later.',
+              confirmLabel: 'Mark complete'
+            });
+            if (!ok) return;
+            const res = completeSession(p);
+            if (!res.ok) { toast(res.reason ?? 'Could not complete the session.', 'error'); return; }
+            await saveProject(p);
+            toast('Automated session marked complete.', 'success');
+            await rerender();
+          }
+        }, '✓ Mark session complete'))
+    ));
+  }
 }
 
 /** Prepare a step's project, slice it, and render the outcome into `resultBox`
