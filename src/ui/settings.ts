@@ -133,7 +133,8 @@ function experimentalCard(): HTMLElement {
     mk('slicerProfileGeneration', 'Slicer profile generation', 'Create filament profiles from completed calibrations (clone a base profile, patch calibrated values).'),
     mk('automaticProfileInstallation', 'Automatic profile installation', 'Allow direct installation into verified slicer versions (desktop app only). Export always remains available.'),
     mk('advancedProfileSelection', 'Advanced profile selection', 'Show every detected profile with filters, raw JSON, and override options.'),
-    mk('unsupportedVersionOverride', 'Unverified version override (not recommended)', 'Allow direct installation into slicer versions that have not been verified. Export is the safer choice.')
+    mk('unsupportedVersionOverride', 'Unverified version override (not recommended)', 'Allow direct installation into slicer versions that have not been verified. Export is the safer choice.'),
+    mk('automatedCalibration', 'Automated calibration pipeline (desktop, early)', 'Let PerfectFit prepare and slice calibration tests itself using an OrcaSlicer install you already have, instead of you hand-driving the slicer. Adds an "Automated calibration" panel to each project. Nothing is installed or changed in your slicer without your say-so.')
   );
 }
 

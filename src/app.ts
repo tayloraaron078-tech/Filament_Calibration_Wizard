@@ -10,6 +10,7 @@ import { renderSettings } from './ui/settings';
 import { renderCard } from './ui/card';
 import { renderReport } from './ui/report';
 import { renderProfileWizard } from './ui/profileWizard';
+import { renderAutomated } from './ui/automatedCalibration';
 import { isDesktop, openExternalUrl } from './slicerIntegration/bridge';
 import { toast } from './ui/dom';
 import type { CalibrationId } from './types';
@@ -23,6 +24,7 @@ export type Route =
   | { view: 'card'; id: string }
   | { view: 'report'; id: string }
   | { view: 'profile'; id: string }
+  | { view: 'automated'; id: string }
   | { view: 'help'; term?: string }
   | { view: 'settings' };
 
@@ -68,6 +70,7 @@ export function parseHash(): Route {
     case 'card': return parts[1] ? { view: 'card', id: parts[1] } : { view: 'dashboard' };
     case 'report': return parts[1] ? { view: 'report', id: parts[1] } : { view: 'dashboard' };
     case 'profile': return parts[1] ? { view: 'profile', id: parts[1] } : { view: 'dashboard' };
+    case 'automated': return parts[1] ? { view: 'automated', id: parts[1] } : { view: 'dashboard' };
     case 'help': return { view: 'help', term: parts[1] };
     case 'settings': return { view: 'settings' };
     default: return { view: 'dashboard' };
@@ -88,6 +91,7 @@ async function route(): Promise<void> {
       case 'card': await renderCard(outlet, r.id); break;
       case 'report': await renderReport(outlet, r.id); break;
       case 'profile': await renderProfileWizard(outlet, r.id); break;
+      case 'automated': await renderAutomated(outlet, r.id); break;
       case 'help': renderHelp(outlet, r.term); break;
       case 'settings': renderSettings(outlet); break;
     }
