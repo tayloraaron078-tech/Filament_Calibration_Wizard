@@ -52,10 +52,17 @@ pub fn read_project_config(template_path: String) -> Result<String, String> {
     Ok(text)
 }
 
-/// Copy `template` into `out`, replacing the project-config entry with
-/// `merged_config`. Every other entry is preserved verbatim. Returns whether the
-/// config entry was found+replaced (vs. added) and the total entry count.
-pub(crate) fn repackage_with_config(template: &Path, merged_config: &str, out: &Path) -> Result<(bool, usize), String> {
+/// Copy `template` into `out`, overwriting each named entry with the given bytes
+/// (adding it if the template lacks it). Every other entry is preserved verbatim.
+/// Returns the entry names that were newly ADDED (not present in the template)
+/// and the total entry count. This is the general assembler used both to swap a
+/// project config and to build a project around a bare model 3mf (config +
+/// custom_gcode_per_layer.xml).
+pub(crate) fn repackage_with_entries(
+    template: &Path,
+    entries: &[(&str, &[u8])],
+    out: &Path,
+) -> Result<(Vec<String>, usize), String> {
     let src = std::fs::File::open(template).map_err(|e| format!("Cannot open template: {e}"))?;
     let mut zip = ZipArchive::new(std::io::BufReader::new(src))
         .map_err(|e| format!("Template is not a valid 3mf/zip: {e}"))?;
@@ -63,7 +70,7 @@ pub(crate) fn repackage_with_config(template: &Path, merged_config: &str, out: &
     let mut writer = ZipWriter::new(std::io::BufWriter::new(out_file));
     let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
-    let mut replaced = false;
+    let mut matched = vec![false; entries.len()];
     let mut count = 0usize;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| format!("Corrupt zip entry {i}: {e}"))?;
@@ -78,25 +85,37 @@ pub(crate) fn repackage_with_config(template: &Path, merged_config: &str, out: &
         writer
             .start_file(&name, opts)
             .map_err(|e| format!("Zip write failed: {e}"))?;
-        if name == PROJECT_CONFIG_ENTRY {
+        if let Some(idx) = entries.iter().position(|(n, _)| *n == name) {
             writer
-                .write_all(merged_config.as_bytes())
+                .write_all(entries[idx].1)
                 .map_err(|e| format!("Zip write failed: {e}"))?;
-            replaced = true;
+            matched[idx] = true;
         } else {
             std::io::copy(&mut entry, &mut writer).map_err(|e| format!("Zip copy failed: {e}"))?;
         }
     }
-    if !replaced {
-        writer
-            .start_file(PROJECT_CONFIG_ENTRY, opts)
-            .map_err(|e| format!("Zip write failed: {e}"))?;
-        writer
-            .write_all(merged_config.as_bytes())
-            .map_err(|e| format!("Zip write failed: {e}"))?;
-        count += 1;
+    let mut added = Vec::new();
+    for (idx, (name, bytes)) in entries.iter().enumerate() {
+        if !matched[idx] {
+            writer
+                .start_file(*name, opts)
+                .map_err(|e| format!("Zip write failed: {e}"))?;
+            writer.write_all(bytes).map_err(|e| format!("Zip write failed: {e}"))?;
+            count += 1;
+            added.push((*name).to_string());
+        }
     }
     writer.finish().map_err(|e| format!("Zip finalize failed: {e}"))?;
+    Ok((added, count))
+}
+
+/// Copy `template` into `out`, replacing the project-config entry with
+/// `merged_config`. Every other entry is preserved verbatim. Returns whether the
+/// config entry was found+replaced (vs. added) and the total entry count.
+pub(crate) fn repackage_with_config(template: &Path, merged_config: &str, out: &Path) -> Result<(bool, usize), String> {
+    let (added, count) =
+        repackage_with_entries(template, &[(PROJECT_CONFIG_ENTRY, merged_config.as_bytes())], out)?;
+    let replaced = !added.iter().any(|n| n == PROJECT_CONFIG_ENTRY);
     Ok((replaced, count))
 }
 
@@ -249,6 +268,87 @@ mod tests {
         assert!(validate_3mf("").is_err());
         assert!(validate_3mf("C:/nope/x.txt").is_err());
         assert!(validate_3mf("C:/nope/missing.3mf").is_err());
+    }
+
+    /// Supervised de-risk for parameterized generation (Stage 6 incr. 3): can we
+    /// build a sliceable project AROUND a bare model-only 3mf by injecting a
+    /// `project_settings.config` plus a generated `custom_gcode_per_layer.xml`,
+    /// and does Orca actually act on our temperature (M104) injections? Uses the
+    /// model-only `flowrate-test-pass1.3mf` as the bare model and a shipped
+    /// project's config as a stand-in donor (the resolver is proven separately).
+    /// Run with `cargo test -- --ignored probe_model_only_wrap_and_temp_inject`.
+    #[test]
+    #[ignore]
+    fn probe_model_only_wrap_and_temp_inject() {
+        use std::process::{Command, Stdio};
+        let orca = Path::new("C:/Program Files/OrcaSlicer/orca-slicer.exe");
+        let bare_model = Path::new("C:/Program Files/OrcaSlicer/resources/calib/filament_flow/flowrate-test-pass1.3mf");
+        let config_donor = Path::new("C:/Program Files/OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf");
+        if !orca.is_file() || !bare_model.is_file() || !config_donor.is_file() {
+            eprintln!("SKIP: Orca / model / donor not present");
+            return;
+        }
+        let d = temp_dir("wrapinject");
+
+        // Donor config (stands in for a resolved config here).
+        let cfg = read_project_config(config_donor.display().to_string()).unwrap();
+
+        // Generated temperature custom-gcode (mirrors the TS serializer shape:
+        // type=4 Custom, M104 S<temp>, at several low layer tops).
+        let temps = [("0.4", 240), ("0.8", 235), ("1.2", 230), ("1.6", 225)];
+        let mut xml = String::from(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<custom_gcodes_per_layer>\n<plate>\n<plate_info id=\"1\"/>\n",
+        );
+        for (z, t) in temps {
+            xml.push_str(&format!(
+                "<layer top_z=\"{z}\" type=\"4\" extruder=\"-858993460\" color=\"\" extra=\"M104 S{t}\"/>\n"
+            ));
+        }
+        xml.push_str("</plate>\n</custom_gcodes_per_layer>\n");
+
+        // Assemble: bare model 3mf + injected config + injected custom gcode.
+        let project = d.join("project.3mf");
+        let (added, count) = repackage_with_entries(
+            bare_model,
+            &[
+                ("Metadata/project_settings.config", cfg.as_bytes()),
+                ("Metadata/custom_gcode_per_layer.xml", xml.as_bytes()),
+            ],
+            &project,
+        )
+        .unwrap();
+        println!("added entries to model-only 3mf: {added:?} (total now {count})");
+        assert!(added.iter().any(|n| n.contains("project_settings.config")), "config should be ADDED to a model-only 3mf");
+
+        // Slice headless into an isolated datadir.
+        let datadir = d.join("datadir");
+        let outdir = d.join("out");
+        std::fs::create_dir_all(&datadir).unwrap();
+        std::fs::create_dir_all(&outdir).unwrap();
+        let status = Command::new(orca)
+            .arg("--datadir").arg(&datadir)
+            .arg("--outputdir").arg(&outdir)
+            .arg("--slice").arg("0")
+            .arg(&project)
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+            .status()
+            .expect("failed to launch orca");
+        let gcode = outdir.join("plate_1.gcode");
+        println!("orca exit={:?} gcode_exists={}", status.code(), gcode.is_file());
+        if !gcode.is_file() {
+            eprintln!("FINDING: a model-only 3mf + injected config did NOT slice — needs build/model_settings.");
+            std::fs::remove_dir_all(&d).ok();
+            return; // record the finding rather than hard-fail the supervised probe
+        }
+        let text = std::fs::read_to_string(&gcode).unwrap_or_default();
+        let injected: Vec<i32> = temps
+            .iter()
+            .filter(|(_, t)| text.contains(&format!("M104 S{t}")))
+            .map(|(_, t)| *t)
+            .collect();
+        println!("gcode {} bytes; injected temps present: {injected:?}", text.len());
+        assert!(!injected.is_empty(), "expected at least one injected M104 temperature in the g-code");
+        std::fs::remove_dir_all(&d).ok();
     }
 
     /// End-to-end pipeline proof on the real installed Orca (supervised):
