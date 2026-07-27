@@ -210,6 +210,7 @@ export interface CalibrationProject {
   generatedJobs?: import('./automatedCalibration/types').GeneratedJobRecord[];
   sessionWarnings?: import('./automatedCalibration/types').SessionWarning[];
   selectedEngineId?: import('./automatedCalibration/types').EngineId;
+  manualOrcaPreset?: import('./automatedCalibration/types').ManualOrcaPresetSelection;
 }
 
 /** Result of the "back up your slicer presets before calibrating" prompt. */

@@ -20,9 +20,16 @@
 // dashboard.ts), and lets the user cancel a session in progress. A
 // cancelled/failed session's steps card is replaced with a restart prompt
 // (beginSession again); a completed session just points back at the project.
+//
+// increment 4: a manual Orca vendor/machine/process/filament picker for when
+// the automatic printer-database mapping can't be used — a hand-entered
+// `PrinterProfile` (no `databasePrinterId`), or the automatic mapping fails
+// to find a matching installed machine/filament. Once chosen, the pick is
+// stored on the session (`manualOrcaPreset`) and used for every resolve
+// instead of `resolveForMaterial`.
 // ---------------------------------------------------------------------------
 
-import { h, clear, toast, confirmDialog } from './dom';
+import { h, clear, toast, confirmDialog, field } from './dom';
 import { getProject, getPrinter, saveProject } from '../storage/store';
 import { getCalibration } from '../data/calibrations';
 import { getMaterial } from '../data/materials';
@@ -30,6 +37,7 @@ import {
   isAutomatedCalibrationEnabled,
   discoverEngines,
   InstalledOrcaEngine,
+  nativeEngineBridge,
   beginSession,
   buildWorkingProfile,
   loadSessionSafe,
@@ -41,8 +49,12 @@ import {
   type PrinterSelection,
   type AutomatedCalibrationSession,
   type CalibrationStepDefinition,
-  type ResolvedPrinterPreset
+  type ResolvedPrinterPreset,
+  type ManualOrcaPresetSelection,
+  type RawMachinePreset,
+  type RawFilamentPreset
 } from '../automatedCalibration';
+import type { MaterialId } from '../types';
 
 export async function renderAutomated(root: HTMLElement, id: string): Promise<void> {
   const p = await getProject(id);
@@ -117,8 +129,34 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   const sessionCard = h('div', { class: 'card' });
   root.append(sessionCard);
 
+  // Resolves and begins a fresh session, optionally with a hand-picked Orca
+  // preset overriding the automatic printer-database mapping. Shared by the
+  // normal start button, the manual-picker's "Use this configuration", and
+  // the after-cancel restart card.
+  const doStartSession = async (manual?: ManualOrcaPresetSelection): Promise<void> => {
+    if (!manual && (!selection || !printer)) return;
+    try {
+      const resolved = manual
+        ? await engine.resolvePresetByNames(manual)
+        : await engine.resolveForMaterial(selection!, p.filament.material);
+      const workingProfile = buildWorkingProfile({
+        projectId: p.id,
+        displayName: manual ? `${mat.label} · ${manual.machine}` : `${mat.label} · ${printer!.name}`,
+        sourceProfileName: resolved.printerSettingsId ?? undefined
+      });
+      beginSession(p, { slicerMode: 'installed_orca', engineId: 'installed_orca', workingProfile });
+      p.manualOrcaPreset = manual;
+      await saveProject(p);
+      toast(`Session started on ${resolved.printerModel ?? manual?.machine ?? printer?.name}.`, 'success');
+      await rerender();
+    } catch (err) {
+      toast(describeResolveError(err), 'error');
+    }
+  };
+
   if (!load.automated) {
     const canStart = diag.recommendedEngineId === 'installed_orca' && !!selection;
+    const manualCard = h('div', {});
 
     sessionCard.append(h('div', {},
       h('h2', { style: 'margin-top:0' }, 'Start an automated session'),
@@ -127,31 +165,22 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
         ` · `, h('strong', {}, mat.label), '.'),
       !printer ? h('p', { class: 'callout callout-warn' }, 'This project has no printer profile — set one on the project page first.') : null,
       printer && !selection ? h('p', { class: 'callout callout-warn' },
-        'This printer profile isn’t linked to PerfectFit’s printer database, so it can’t be matched to an installed OrcaSlicer machine preset yet. Re-select it from the database on the Printers page (or add it there) to enable automated calibration.') : null,
+        'This printer profile isn’t linked to PerfectFit’s printer database, so it can’t be matched to an installed OrcaSlicer machine preset automatically. Pick one by hand below, or re-select the printer from the database on the Printers page.') : null,
       diag.recommendedEngineId !== 'installed_orca'
         ? h('p', { class: 'callout callout-warn' }, 'No usable OrcaSlicer install was detected — install OrcaSlicer 2.4.x, or select its executable, then re-check above.')
         : null,
       h('div', { class: 'btn-row' },
-        h('button', {
-          class: 'btn btn-primary', disabled: !canStart, onClick: async () => {
-            if (!selection || !printer) return;
-            try {
-              const resolved = await engine.resolveForMaterial(selection, p.filament.material);
-              const workingProfile = buildWorkingProfile({
-                projectId: p.id,
-                displayName: `${mat.label} · ${printer.name}`,
-                sourceProfileName: resolved.printerSettingsId ?? undefined
-              });
-              beginSession(p, { slicerMode: 'installed_orca', engineId: 'installed_orca', workingProfile });
-              await saveProject(p);
-              toast(`Session started on ${resolved.printerModel ?? printer.name}.`, 'success');
-              await rerender();
-            } catch (err) {
-              toast(describeResolveError(err), 'error');
-            }
-          }
-        }, '▶ Start automated session')
-      )
+        canStart ? h('button', { class: 'btn btn-primary', onClick: () => doStartSession() }, '▶ Start automated session') : null,
+        diag.recommendedEngineId === 'installed_orca'
+          ? h('button', {
+              class: 'btn btn-sm', onClick: async () => {
+                if (manualCard.childElementCount) { clear(manualCard); return; }
+                await renderManualPicker(manualCard, m => doStartSession(m));
+              }
+            }, '🔧 Pick the Orca printer/filament manually')
+          : null
+      ),
+      manualCard
     ));
     return;
   }
@@ -195,30 +224,21 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   ));
 
   if (status === 'cancelled' || status === 'failed') {
+    const restartManualCard = h('div', {});
     root.append(h('div', { class: 'card' },
       h('p', { class: 'callout callout-warn' },
         `This session was ${status}. Starting a new one uses the same printer and material and begins fresh.`),
       h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn-primary', disabled: !selection || !printer, onClick: () => doStartSession() },
+          '▶ Start a new session'),
         h('button', {
-          class: 'btn btn-primary', disabled: !selection || !printer, onClick: async () => {
-            if (!selection || !printer) return;
-            try {
-              const resolved = await engine.resolveForMaterial(selection, p.filament.material);
-              const newProfile = buildWorkingProfile({
-                projectId: p.id,
-                displayName: `${mat.label} · ${printer.name}`,
-                sourceProfileName: resolved.printerSettingsId ?? undefined
-              });
-              beginSession(p, { slicerMode: 'installed_orca', engineId: 'installed_orca', workingProfile: newProfile });
-              await saveProject(p);
-              toast('New automated session started.', 'success');
-              await rerender();
-            } catch (err) {
-              toast(describeResolveError(err), 'error');
-            }
+          class: 'btn btn-sm', onClick: async () => {
+            if (restartManualCard.childElementCount) { clear(restartManualCard); return; }
+            await renderManualPicker(restartManualCard, m => doStartSession(m));
           }
-        }, '▶ Start a new session')
-      )
+        }, '🔧 Pick the Orca printer/filament manually')
+      ),
+      restartManualCard
     ));
     return;
   }
@@ -232,7 +252,12 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   }
 
   // --- workflow steps: prepare + slice each one, in place ---
-  const canSlice = diag.recommendedEngineId === 'installed_orca' && !!selection;
+  const manualPreset = session.manualOrcaPreset;
+  const canSlice = diag.recommendedEngineId === 'installed_orca' && (!!selection || !!manualPreset);
+  if (manualPreset) {
+    sessionCard.append(h('p', { class: 'field-help' },
+      `Using a manually picked Orca preset: ${manualPreset.vendor} — ${manualPreset.machine} · ${manualPreset.filament}.`));
+  }
   const sliceableSteps = orderWorkflow(p.stepOrder).filter(sid => getStepDefinition(sid).needsSlicing);
   const stepsCard = h('div', { class: 'card' },
     h('h2', { style: 'margin-top:0' }, 'Steps this pipeline can slice for you'));
@@ -254,9 +279,9 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
       class: 'btn btn-sm btn-primary',
       disabled: !canSlice || !readiness.ready,
       onClick: async () => {
-        if (!selection || !printer) return;
+        if (!selection && !manualPreset) return;
         (runBtn as HTMLButtonElement).disabled = true;
-        await prepareAndSlice({ engine, session, selection, material: p.filament.material, stepDef, resultBox });
+        await prepareAndSlice({ engine, session, selection, manualPreset, material: p.filament.material, stepDef, resultBox });
         await saveProject(p);
         (runBtn as HTMLButtonElement).disabled = false;
       }
@@ -285,17 +310,20 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
 async function prepareAndSlice(args: {
   engine: InstalledOrcaEngine;
   session: AutomatedCalibrationSession;
-  selection: PrinterSelection;
-  material: AutomatedCalibrationSession['filament']['material'];
+  selection: PrinterSelection | null;
+  manualPreset: ManualOrcaPresetSelection | undefined;
+  material: MaterialId;
   stepDef: CalibrationStepDefinition;
   resultBox: HTMLElement;
 }): Promise<void> {
-  const { engine, session, selection, material, stepDef, resultBox } = args;
+  const { engine, session, selection, manualPreset, material, stepDef, resultBox } = args;
   clear(resultBox);
   resultBox.append(h('p', { class: 'field-help' }, '⏳ Resolving your printer + preparing the project…'));
   let resolved: ResolvedPrinterPreset;
   try {
-    resolved = await engine.resolveForMaterial(selection, material);
+    resolved = manualPreset
+      ? await engine.resolvePresetByNames(manualPreset)
+      : await engine.resolveForMaterial(selection!, material);
   } catch (err) {
     clear(resultBox);
     resultBox.append(h('p', { class: 'callout callout-bad' }, describeResolveError(err)));
@@ -364,4 +392,87 @@ function describePrepareError(err: unknown): string {
   if (msg.includes('ASSET_UNAVAILABLE')) return 'The calibration model for this test couldn’t be found in your OrcaSlicer install.';
   if (msg.includes('ENGINE_NOT_DETECTED')) return 'OrcaSlicer isn’t detected — re-check the slicing engine above.';
   return `Could not prepare this test: ${msg}`;
+}
+
+/**
+ * A manual Orca machine + filament picker, for when the automatic
+ * printer-database mapping isn't usable (a hand-entered printer, or the
+ * automatic match fails). Lists every installed machine that declares a
+ * default process (machines without one aren't offered — there's no process
+ * picker here), then the filaments compatible with the chosen machine.
+ * Calls `onChosen` with the exact vendor/machine/process/filament names once
+ * both are picked; never throws — load failures render as a callout.
+ */
+async function renderManualPicker(
+  container: HTMLElement,
+  onChosen: (m: ManualOrcaPresetSelection) => Promise<void> | void
+): Promise<void> {
+  clear(container);
+  container.append(h('p', { class: 'field-help' }, '⏳ Loading installed OrcaSlicer machines…'));
+  let machines: RawMachinePreset[];
+  try {
+    machines = await nativeEngineBridge.listInstalledMachines('installed_orca');
+  } catch (err) {
+    clear(container);
+    container.append(h('p', { class: 'callout callout-bad' },
+      `Could not list installed machines: ${err instanceof Error ? err.message : String(err)}`));
+    return;
+  }
+  const usable = machines.filter(m => m.default_print_profile);
+  clear(container);
+  if (!usable.length) {
+    container.append(h('p', { class: 'field-help' },
+      'No installed OrcaSlicer machine preset with a default process profile was found.'));
+    return;
+  }
+
+  let filaments: RawFilamentPreset[] = [];
+  const machineSelect = h('select', {},
+    h('option', { value: '' }, 'Select a machine…'),
+    usable.map((m, i) => h('option', { value: String(i) }, `${m.vendor} — ${m.name}`))
+  ) as HTMLSelectElement;
+  const filamentSelect = h('select', { disabled: true },
+    h('option', { value: '' }, 'Select a machine first')) as HTMLSelectElement;
+  const useBtn = h('button', { class: 'btn btn-primary btn-sm', disabled: true },
+    'Use this configuration') as HTMLButtonElement;
+
+  machineSelect.addEventListener('change', async () => {
+    clear(filamentSelect);
+    filamentSelect.disabled = true;
+    useBtn.disabled = true;
+    filaments = [];
+    if (machineSelect.value === '') return;
+    const m = usable[Number(machineSelect.value)];
+    filamentSelect.append(h('option', { value: '' }, '⏳ Loading filaments…'));
+    try {
+      filaments = await nativeEngineBridge.listVendorFilaments('installed_orca', m.vendor, m.name);
+    } catch {
+      clear(filamentSelect);
+      filamentSelect.append(h('option', { value: '' }, 'Could not load filaments'));
+      return;
+    }
+    clear(filamentSelect);
+    filamentSelect.append(
+      h('option', { value: '' }, filaments.length ? 'Select a filament…' : 'No compatible filaments found'),
+      ...filaments.map((f, i) => h('option', { value: String(i) }, `${f.name}${f.filament_type ? ` (${f.filament_type})` : ''}`))
+    );
+    filamentSelect.disabled = filaments.length === 0;
+  });
+  filamentSelect.addEventListener('change', () => {
+    useBtn.disabled = !(machineSelect.value !== '' && filamentSelect.value !== '');
+  });
+  useBtn.addEventListener('click', async () => {
+    const m = usable[Number(machineSelect.value)];
+    const f = filaments[Number(filamentSelect.value)];
+    if (!m?.default_print_profile || !f) return;
+    await onChosen({ vendor: m.vendor, machine: m.name, process: m.default_print_profile, filament: f.name });
+  });
+
+  container.append(
+    h('div', { class: 'field-row' },
+      field('Orca machine preset', machineSelect),
+      field('Filament preset', filamentSelect)
+    ),
+    h('div', { class: 'btn-row' }, useBtn)
+  );
 }

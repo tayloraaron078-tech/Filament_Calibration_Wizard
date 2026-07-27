@@ -102,6 +102,22 @@ export interface SessionWarning {
 }
 
 /**
+ * An exact Orca vendor/machine/process/filament choice the user picked by hand
+ * (Stage 7 fallback UI), overriding the automatic printer-database →
+ * installed-Orca mapping (`mapSelection`/`resolveForMaterial`). Needed when a
+ * `PrinterProfile` has no `databasePrinterId` (hand-entered printer) or the
+ * automatic mapping can't find/match an installed machine or filament. Once
+ * set, every resolve for this session uses `resolvePresetByNames` with these
+ * exact names instead of the automatic path.
+ */
+export interface ManualOrcaPresetSelection {
+  vendor: string;
+  machine: string;
+  process: string;
+  filament: string;
+}
+
+/**
  * The fields Stage 2 will add to `CalibrationProject` to make it an automated
  * session. Kept as a standalone interface in Stage 1 so the contract is
  * reviewable before the schema migration lands. Every field is optional, so
@@ -116,6 +132,9 @@ export interface AutomatedSessionExtension {
   generatedJobs?: GeneratedJobRecord[];
   sessionWarnings?: SessionWarning[];
   selectedEngineId?: EngineId;
+  /** A hand-picked Orca vendor/machine/process/filament, overriding the
+   *  automatic printer-database mapping for every resolve in this session. */
+  manualOrcaPreset?: ManualOrcaPresetSelection;
 }
 
 /** A `CalibrationProject` once the automated fields are present. */
