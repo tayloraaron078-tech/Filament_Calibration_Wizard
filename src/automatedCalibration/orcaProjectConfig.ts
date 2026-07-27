@@ -110,20 +110,29 @@ export function serializeProjectConfig(config: Record<string, unknown>): string 
   return JSON.stringify(config, null, 4) + '\n';
 }
 
+export interface MergedProjectConfig {
+  /** The merged config serialized ready for a project 3mf's config entry. */
+  text: string;
+  /** Orca keys whose value changed, in application order. */
+  appliedKeys: string[];
+  notes: string[];
+  /** The printer the base config targets (so a caller can warn on a mismatch). */
+  printerSettingsId: string | null;
+}
+
 /**
- * End-to-end: parse a template `project_settings.config`, merge in a session's
- * calibrated values, and serialize the result. `printerSettingsId` reports the
- * printer the template config is built for, so a caller can warn when it does
- * not match the user's actual printer (arbitrary-printer resolution is a
- * separate concern — this only carries the calibrated filament values).
+ * Merge a session's calibrated values into a config OBJECT and serialize it. The
+ * base config may be a template's own `project_settings.config` (carrying the
+ * template's printer) or a resolved arbitrary-printer config from
+ * `resolvePrinterPreset` — either way only the calibrated filament keys change.
+ * `printerSettingsId` reports the printer the base config targets.
  */
-export function mergeCalibrationIntoProjectConfig(
-  templateConfigText: string,
+export function mergeCalibrationIntoConfig(
+  baseConfig: Record<string, unknown>,
   project: CalibrationProject
-): { text: string; appliedKeys: string[]; notes: string[]; printerSettingsId: string | null } {
-  const config = parseProjectConfig(templateConfigText);
+): MergedProjectConfig {
   const patches = buildPatchesFromProject(project);
-  const merged = applyPatchesToConfig(config, patches);
+  const merged = applyPatchesToConfig(baseConfig, patches);
   const printerSettingsId =
     typeof merged.config.printer_settings_id === 'string'
       ? (merged.config.printer_settings_id as string)
@@ -134,4 +143,17 @@ export function mergeCalibrationIntoProjectConfig(
     notes: merged.notes,
     printerSettingsId
   };
+}
+
+/**
+ * End-to-end: parse a template `project_settings.config` text, merge in a
+ * session's calibrated values, and serialize the result. Thin wrapper over
+ * `mergeCalibrationIntoConfig` for the common case where the base config comes
+ * from a template 3mf as text.
+ */
+export function mergeCalibrationIntoProjectConfig(
+  templateConfigText: string,
+  project: CalibrationProject
+): MergedProjectConfig {
+  return mergeCalibrationIntoConfig(parseProjectConfig(templateConfigText), project);
 }

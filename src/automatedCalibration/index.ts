@@ -90,11 +90,22 @@ export type {
   AssembleProjectArgs,
   RawResolvedPreset,
   ResolvePresetArgs,
-  RawMachinePreset
+  RawMachinePreset,
+  RawFilamentPreset
 } from './engineBridge';
 
 export { mapPrinterToOrca, formatNozzle } from './printerMapping';
 export type { OrcaMachineMapping } from './printerMapping';
+
+export {
+  MATERIAL_TO_ORCA_TYPES,
+  orcaTypesForMaterial,
+  fromRawFilament,
+  filamentsForMachine,
+  filamentsForMaterial,
+  selectFilamentForMaterial
+} from './filamentSelection';
+export type { OrcaFilamentPreset, FilamentSelectionOptions } from './filamentSelection';
 
 export { InstalledOrcaEngine } from './engines/installedOrcaEngine';
 export { ManualExportEngine } from './engines/manualExportEngine';
@@ -111,9 +122,23 @@ export {
   parseProjectConfig,
   applyPatchesToConfig,
   serializeProjectConfig,
+  mergeCalibrationIntoConfig,
   mergeCalibrationIntoProjectConfig
 } from './orcaProjectConfig';
-export type { ConfigMergeResult } from './orcaProjectConfig';
+export type { ConfigMergeResult, MergedProjectConfig } from './orcaProjectConfig';
 
 export { createEngines, discoverEngines } from './engineRegistry';
 export type { EngineStatus, EngineDiagnostics } from './engineRegistry';
+
+export {
+  buildTemperatureBands,
+  serializeCustomGcodePerLayer,
+  generateTemperatureTowerGcode,
+  UNSET_EXTRUDER,
+  CUSTOM_GCODE_TYPE
+} from './temperatureTower';
+export type {
+  TemperatureBand,
+  TemperatureRange,
+  TemperatureTowerGeometry
+} from './temperatureTower';

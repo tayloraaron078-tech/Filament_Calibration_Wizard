@@ -113,6 +113,46 @@ impl PresetDir {
         self.resolve_inner(name, &mut visited, 0)
     }
 
+    /// Collect the first value found for each requested field walking `name`'s
+    /// `inherits` chain (child overrides parent). Cheaper than `resolve` when only
+    /// a few fields are needed, and `cache` lets shared ancestors (e.g. a common
+    /// base every leaf inherits) be parsed just once across many leaves. Missing
+    /// files and cycles end the walk quietly rather than erroring — this is used
+    /// for best-effort metadata (filament type/vendor/compatibility).
+    fn collect_fields(
+        &mut self,
+        name: &str,
+        fields: &[&str],
+        cache: &mut HashMap<PathBuf, Value>,
+        out: &mut Map<String, Value>,
+        depth: usize,
+    ) {
+        if depth > 32 {
+            return;
+        }
+        let Ok(path) = self.find(name) else { return };
+        let value = match cache.get(&path) {
+            Some(v) => v.clone(),
+            None => {
+                let Ok(txt) = std::fs::read_to_string(&path) else { return };
+                let Ok(v) = serde_json::from_str::<Value>(&txt) else { return };
+                cache.insert(path.clone(), v.clone());
+                v
+            }
+        };
+        let Some(obj) = value.as_object() else { return };
+        for &f in fields {
+            if !out.contains_key(f) {
+                if let Some(val) = obj.get(f) {
+                    out.insert(f.to_string(), val.clone());
+                }
+            }
+        }
+        if let Some(parent) = obj.get("inherits").and_then(|x| x.as_str()) {
+            self.collect_fields(parent, fields, cache, out, depth + 1);
+        }
+    }
+
     fn resolve_inner(
         &mut self,
         name: &str,
@@ -325,6 +365,117 @@ pub fn list_installed_machines(engine_id: String) -> Result<Vec<RawMachinePreset
     Ok(out)
 }
 
+/// Identity + material metadata of one user-selectable filament preset, for
+/// mapping a chosen material to an Orca filament leaf the resolver can use.
+#[derive(Serialize, Clone)]
+pub struct RawFilamentPreset {
+    pub vendor: String,
+    pub name: String,
+    pub filament_type: Option<String>,
+    pub filament_vendor: Option<String>,
+    /// Machine leaf names this filament declares compatibility with. Empty means
+    /// Orca treats it as compatible with every printer (see `universal`).
+    pub compatible_printers: Vec<String>,
+    pub universal: bool,
+}
+
+/// First string of a value that may be a bare string or an array of strings.
+fn first_str_val(v: Option<&Value>) -> Option<String> {
+    match v {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Array(a)) => a.first().and_then(|x| x.as_str()).map(|s| s.to_string()),
+        _ => None,
+    }
+}
+
+/// A field that may be a string, an array of strings, or absent → a Vec.
+fn string_list(v: Option<&Value>) -> Vec<String> {
+    match v {
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .collect(),
+        Some(Value::String(s)) => vec![s.clone()],
+        _ => Vec::new(),
+    }
+}
+
+/// Enumerate one vendor's user-selectable (`instantiation == "true"`) filament
+/// presets, optionally filtered to those compatible with a given machine leaf.
+/// A calibration tunes the filament, so the material/filament is a selection the
+/// caller supplies separately from the printer — this backs that selection.
+/// Read-only, under the vetted engine's resources root; filament type/vendor are
+/// resolved through the `inherits` chain (they usually live on a shared base).
+#[tauri::command]
+pub fn list_vendor_filaments(
+    engine_id: String,
+    vendor: String,
+    machine_name: Option<String>,
+) -> Result<Vec<RawFilamentPreset>, String> {
+    validate_name(&vendor)?;
+    let resources = engine::engine_resources_root(&engine_id)
+        .ok_or_else(|| "Engine resources root unknown — detect the engine first".to_string())?;
+    let vendor_dir = resources.join("profiles").join(&vendor);
+    if !vendor_dir.is_dir() {
+        return Err(format!("Unknown vendor profile folder: {}", vendor_dir.display()));
+    }
+    security::ensure_under(&resources, &vendor_dir)?;
+    let filament_dir = vendor_dir.join("filament");
+
+    let mut presets = PresetDir::new(filament_dir.clone());
+    let mut cache: HashMap<PathBuf, Value> = HashMap::new();
+    let mut out = Vec::new();
+    let want = ["filament_type", "filament_vendor", "compatible_printers"];
+
+    let Ok(files) = std::fs::read_dir(&filament_dir) else {
+        return Ok(out);
+    };
+    for f in files.flatten() {
+        let p = f.path();
+        if p.extension().and_then(|x| x.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(txt) = std::fs::read_to_string(&p) else { continue };
+        let Ok(val) = serde_json::from_str::<Value>(&txt) else { continue };
+        if val.get("instantiation").and_then(|x| x.as_str()) != Some("true") {
+            continue;
+        }
+        let Some(name) = val.get("name").and_then(|x| x.as_str()) else { continue };
+
+        // Cheap pre-filter: if the leaf itself lists compatible printers and the
+        // requested machine isn't among them, reject without walking the chain.
+        let leaf_compat = string_list(val.get("compatible_printers"));
+        if let Some(machine) = machine_name.as_deref() {
+            if !leaf_compat.is_empty() && !leaf_compat.iter().any(|m| m == machine) {
+                continue;
+            }
+        }
+
+        // Resolve type/vendor/compat through the inherits chain (child wins).
+        cache.entry(p.clone()).or_insert_with(|| val.clone());
+        let mut collected = Map::new();
+        presets.collect_fields(name, &want, &mut cache, &mut collected, 0);
+
+        let compatible_printers = string_list(collected.get("compatible_printers"));
+        let universal = compatible_printers.is_empty();
+        if let Some(machine) = machine_name.as_deref() {
+            if !universal && !compatible_printers.iter().any(|m| m == machine) {
+                continue;
+            }
+        }
+
+        out.push(RawFilamentPreset {
+            vendor: vendor.clone(),
+            name: name.to_string(),
+            filament_type: first_str_val(collected.get("filament_type")),
+            filament_vendor: first_str_val(collected.get("filament_vendor")),
+            compatible_printers,
+            universal,
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,6 +566,100 @@ mod tests {
         assert_eq!(flat.get("filament_settings_id").unwrap(), &serde_json::json!(["PLA"]));
         assert_eq!(flat.get("layer_height").unwrap(), "0.2");
         assert_eq!(flat.get("filament_flow_ratio").unwrap(), &serde_json::json!(["1"]));
+    }
+
+    #[test]
+    fn collect_fields_walks_chain_child_wins() {
+        let d = temp_dir("collect");
+        write_preset(&d, "fdm_filament_pla", r#"{"name":"fdm_filament_pla","filament_type":"PLA"}"#);
+        write_preset(
+            &d,
+            "Base",
+            r#"{"name":"Base","inherits":"fdm_filament_pla","filament_vendor":["Generic"],"compatible_printers":[]}"#,
+        );
+        write_preset(
+            &d,
+            "Leaf",
+            r#"{"name":"Leaf","inherits":"Base","compatible_printers":["My Printer 0.4 nozzle"]}"#,
+        );
+        let mut dir = PresetDir::new(d.clone());
+        let mut cache = HashMap::new();
+        let mut out = Map::new();
+        dir.collect_fields(
+            "Leaf",
+            &["filament_type", "filament_vendor", "compatible_printers"],
+            &mut cache,
+            &mut out,
+            0,
+        );
+        assert_eq!(first_str_val(out.get("filament_type")).as_deref(), Some("PLA")); // from grandparent
+        assert_eq!(first_str_val(out.get("filament_vendor")).as_deref(), Some("Generic")); // from parent
+        // leaf's non-empty compatible_printers wins over the parent's empty one
+        assert_eq!(string_list(out.get("compatible_printers")), vec!["My Printer 0.4 nozzle"]);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn string_list_and_first_str_handle_scalar_array_and_missing() {
+        assert_eq!(first_str_val(Some(&serde_json::json!("x"))).as_deref(), Some("x"));
+        assert_eq!(first_str_val(Some(&serde_json::json!(["a", "b"]))).as_deref(), Some("a"));
+        assert_eq!(first_str_val(None), None);
+        assert_eq!(string_list(Some(&serde_json::json!(["a", "b"]))), vec!["a", "b"]);
+        assert_eq!(string_list(Some(&serde_json::json!("solo"))), vec!["solo"]);
+        assert!(string_list(None).is_empty());
+    }
+
+    /// Supervised: list real BBL filaments compatible with the X1 Carbon 0.4
+    /// nozzle and confirm a PLA leaf appears and resolves. Run with
+    /// `cargo test -- --ignored probe_real_vendor_filaments`.
+    #[test]
+    #[ignore]
+    fn probe_real_vendor_filaments() {
+        let prof = PathBuf::from("C:/Program Files/OrcaSlicer/resources/profiles/BBL");
+        if !prof.is_dir() {
+            eprintln!("SKIP: BBL profiles not present");
+            return;
+        }
+        // Emulate list_vendor_filaments filtered to the X1C 0.4 nozzle machine.
+        let machine = "Bambu Lab X1 Carbon 0.4 nozzle";
+        let filament_dir = prof.join("filament");
+        let mut presets = PresetDir::new(filament_dir.clone());
+        let mut cache: HashMap<PathBuf, Value> = HashMap::new();
+        let want = ["filament_type", "filament_vendor", "compatible_printers"];
+        let mut pla = Vec::new();
+        let mut total = 0usize;
+        for f in std::fs::read_dir(&filament_dir).unwrap().flatten() {
+            let p = f.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("json") {
+                continue;
+            }
+            let val: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap_or(Value::Null);
+            if val.get("instantiation").and_then(|x| x.as_str()) != Some("true") {
+                continue;
+            }
+            let name = val.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let leaf_compat = string_list(val.get("compatible_printers"));
+            if !leaf_compat.is_empty() && !leaf_compat.iter().any(|m| m == machine) {
+                continue;
+            }
+            cache.entry(p.clone()).or_insert_with(|| val.clone());
+            let mut collected = Map::new();
+            presets.collect_fields(&name, &want, &mut cache, &mut collected, 0);
+            let compat = string_list(collected.get("compatible_printers"));
+            if !compat.is_empty() && !compat.iter().any(|m| m == machine) {
+                continue;
+            }
+            total += 1;
+            if first_str_val(collected.get("filament_type")).as_deref() == Some("PLA") {
+                pla.push(name);
+            }
+        }
+        println!("X1C-compatible filaments: {total}, of which PLA: {}", pla.len());
+        assert!(total > 0, "should find filaments for the X1C");
+        assert!(pla.iter().any(|n| n.contains("Basic")), "expected a Bambu PLA Basic leaf; got {pla:?}");
+        // and the resolver accepts one
+        let one = pla.iter().find(|n| n.contains("Basic")).unwrap();
+        assert!(PresetDir::new(filament_dir).resolve(one).is_ok());
     }
 
     /// Supervised: does mapping a printer via the installed machine index yield

@@ -240,9 +240,17 @@ export interface SlicingEngine {
 
   resolvePrinterPreset(selection: PrinterSelection): Promise<ResolvedPrinterPreset>;
 
+  /**
+   * Assemble a sliceable project for a step. When `resolvedPreset` is supplied
+   * the session's calibrated values are merged into THAT (the user's real
+   * printer/process/filament, from `resolvePrinterPreset`); otherwise the
+   * calibration template's own embedded config is used (correct only when the
+   * user prints on the template's printer).
+   */
   prepareProject(
     session: AutomatedCalibrationSession,
-    step: CalibrationStepDefinition
+    step: CalibrationStepDefinition,
+    resolvedPreset?: ResolvedPrinterPreset
   ): Promise<PreparedCalibrationProject>;
 
   slice(

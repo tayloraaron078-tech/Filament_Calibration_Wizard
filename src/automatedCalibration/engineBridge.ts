@@ -112,6 +112,17 @@ export interface RawMachinePreset {
   default_filament_profile: string | null;
 }
 
+export interface RawFilamentPreset {
+  vendor: string;
+  name: string;
+  filament_type: string | null;
+  filament_vendor: string | null;
+  /** Machine leaf names this filament declares compatibility with. */
+  compatible_printers: string[];
+  /** True when compatible_printers is empty — Orca treats it as universal. */
+  universal: boolean;
+}
+
 /** The native surface the engines depend on. Injectable for tests. */
 export interface EngineNativeBridge {
   isDesktop(): boolean;
@@ -129,6 +140,14 @@ export interface EngineNativeBridge {
   /** Enumerate the installed slicer's user-selectable machine presets across
    *  vendors, for mapping a printer selection to (vendor, machine, process). */
   listInstalledMachines(engineId: EngineId): Promise<RawMachinePreset[]>;
+  /** Enumerate one vendor's user-selectable filament presets, optionally filtered
+   *  to those compatible with a given machine leaf, for material → filament
+   *  selection. */
+  listVendorFilaments(
+    engineId: EngineId,
+    vendor: string,
+    machineName?: string
+  ): Promise<RawFilamentPreset[]>;
 }
 
 // --- production implementation (Tauri via window.__TAURI__) ------------------
@@ -199,6 +218,13 @@ export const nativeEngineBridge: EngineNativeBridge = {
   },
   listInstalledMachines(engineId) {
     return invoke<RawMachinePreset[]>('list_installed_machines', { engineId });
+  },
+  listVendorFilaments(engineId, vendor, machineName) {
+    return invoke<RawFilamentPreset[]>('list_vendor_filaments', {
+      engineId,
+      vendor,
+      machineName: machineName ?? null
+    });
   }
 };
 

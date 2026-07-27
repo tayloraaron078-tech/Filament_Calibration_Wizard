@@ -34,9 +34,16 @@ import type { EngineStatus } from '../engineRegistry';
 import { getAsset, resolveAsset } from '../assets';
 import { inputFingerprintForStep } from '../workflow';
 import { workspaceDirName } from '../projectPreparation';
-import { mergeCalibrationIntoProjectConfig } from '../orcaProjectConfig';
+import { mergeCalibrationIntoConfig, mergeCalibrationIntoProjectConfig } from '../orcaProjectConfig';
 import { mapPrinterToOrca, type OrcaMachineMapping } from '../printerMapping';
+import {
+  fromRawFilament,
+  selectFilamentForMaterial,
+  type FilamentSelectionOptions,
+  type OrcaFilamentPreset
+} from '../filamentSelection';
 import { getPrinterSpec } from '../../data/printerDatabase';
+import type { MaterialId } from '../../types';
 import {
   baseName,
   inspectSlicedJob,
@@ -214,10 +221,65 @@ export class InstalledOrcaEngine implements SlicingEngine {
   }
 
   /**
+   * List the installed slicer's filament presets for a vendor, optionally
+   * filtered to those compatible with a machine leaf. The material/filament is a
+   * separate calibration choice — this backs the Stage 7 material picker.
+   */
+  async listFilaments(vendor: string, machineName?: string): Promise<OrcaFilamentPreset[]> {
+    if (!this.bridge.isDesktop()) {
+      throw new Error('NOT_DESKTOP: filament listing requires the desktop app.');
+    }
+    const raw = await this.bridge.listVendorFilaments(ENGINE_ID, vendor, machineName);
+    return raw.map(fromRawFilament);
+  }
+
+  /**
+   * List the filament presets compatible with the printer a selection maps to,
+   * so the UI can offer materials known to work on that machine.
+   */
+  async listFilamentsForSelection(selection: PrinterSelection): Promise<OrcaFilamentPreset[]> {
+    const mapping = await this.mapSelection(selection);
+    return this.listFilaments(mapping.vendor, mapping.machineName);
+  }
+
+  /**
+   * Fully end-to-end for an arbitrary printer: map the printer → machine +
+   * process, pick a filament leaf for the calibrated material, and resolve the
+   * three into one flat config. Throws `FILAMENT_NOT_FOUND` when no installed
+   * filament matches the material on that machine (the caller can then let the
+   * user pick one explicitly and call `resolveForPrinter`).
+   */
+  async resolveForMaterial(
+    selection: PrinterSelection,
+    material: MaterialId,
+    opts: Omit<FilamentSelectionOptions, 'machineName'> = {}
+  ): Promise<ResolvedPrinterPreset> {
+    const mapping = await this.mapSelection(selection);
+    const filaments = await this.listFilaments(mapping.vendor, mapping.machineName);
+    const chosen = selectFilamentForMaterial(filaments, material, {
+      ...opts,
+      machineName: mapping.machineName
+    });
+    if (!chosen) {
+      throw new Error(
+        `FILAMENT_NOT_FOUND: no installed OrcaSlicer filament for material "${material}" on ` +
+          `"${mapping.machineName}"; pick a filament preset and use resolveForPrinter instead.`
+      );
+    }
+    return this.resolvePresetByNames({
+      vendor: mapping.vendor,
+      machine: mapping.machineName,
+      process: mapping.process,
+      filament: chosen.name
+    });
+  }
+
+  /**
    * `SlicingEngine` contract entry. A complete Orca config also needs a base
    * filament preset (the material being calibrated), which a `PrinterSelection`
    * does not carry — so this maps the printer and then directs the caller to
-   * `resolveForPrinter` with a filament. The printer mapping itself is done.
+   * `resolveForPrinter` / `resolveForMaterial` with the material. The printer
+   * mapping itself is done.
    */
   async resolvePrinterPreset(selection: PrinterSelection): Promise<ResolvedPrinterPreset> {
     const mapping = await this.mapSelection(selection);
@@ -229,18 +291,25 @@ export class InstalledOrcaEngine implements SlicingEngine {
 
   /**
    * Assemble a complete, sliceable Orca project 3mf for one step: take the
-   * calibration template shipped in the user's Orca install, merge the session's
-   * calibrated filament values into its `project_settings.config`, and stage it
-   * in the job workspace. Narrow support in this increment — only steps whose
-   * asset is already a complete project (`project-template`, e.g. the pressure
-   * advance pattern). Bare-model steps (temperature/flow towers) need parameterized
-   * project generation and are the next increment. Arbitrary-printer preset
-   * resolution is `resolvePrinterPreset` (also next); this carries the template's
-   * own printer plus the calibrated filament values.
+   * calibration template shipped in the user's Orca install (its geometry + any
+   * per-layer custom g-code), swap in a `project_settings.config` carrying the
+   * session's calibrated filament values, and stage it in the job workspace.
+   *
+   * When `resolvedPreset` is supplied the calibrated values are merged into the
+   * user's REAL printer/process/filament config (from `resolveForPrinter` /
+   * `resolveForMaterial`), so the slice targets their actual machine. Without it,
+   * the template's own embedded config is used — correct only when the user
+   * prints on the template's printer, so a warning is recorded.
+   *
+   * Narrow support in this increment — only steps whose asset is already a
+   * complete project (`project-template`, e.g. the pressure-advance pattern).
+   * Bare-model steps (temperature/flow towers) need parameterized project
+   * generation and are the next increment.
    */
   async prepareProject(
     session: AutomatedCalibrationSession,
-    step: CalibrationStepDefinition
+    step: CalibrationStepDefinition,
+    resolvedPreset?: ResolvedPrinterPreset
   ): Promise<PreparedCalibrationProject> {
     if (!this.bridge.isDesktop()) {
       throw new Error('NOT_DESKTOP: project assembly requires the desktop app.');
@@ -261,8 +330,12 @@ export class InstalledOrcaEngine implements SlicingEngine {
 
     const fingerprint = inputFingerprintForStep(session.workingProfile, step.id);
     const jobId = workspaceDirName(session.id, step.id, fingerprint);
-    const templateConfig = await this.bridge.readProjectConfig(resolved.location);
-    const merged = mergeCalibrationIntoProjectConfig(templateConfig, session);
+    // Base config: the user's resolved printer when available, else the
+    // template's own (template geometry is used either way — only the config
+    // entry is swapped, which a real Orca slice was proven to accept).
+    const merged = resolvedPreset
+      ? mergeCalibrationIntoConfig(resolvedPreset.settings, session)
+      : mergeCalibrationIntoProjectConfig(await this.bridge.readProjectConfig(resolved.location), session);
     const assembled = await this.bridge.assembleCalibrationProject({
       engineId: ENGINE_ID,
       sessionId: session.id,

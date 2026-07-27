@@ -92,7 +92,8 @@ export class ManualExportEngine implements SlicingEngine {
 
   prepareProject(
     _session: AutomatedCalibrationSession,
-    _step: CalibrationStepDefinition
+    _step: CalibrationStepDefinition,
+    _resolvedPreset?: ResolvedPrinterPreset
   ): Promise<PreparedCalibrationProject> {
     return notUntilStage6<PreparedCalibrationProject>('prepareProject');
   }

@@ -97,9 +97,45 @@ function fakeBridge(overrides: Partial<EngineNativeBridge> = {}): EngineNativeBr
     assembleCalibrationProject: async () => ASSEMBLED,
     resolvePresetByNames: async () => RESOLVED_PRESET,
     listInstalledMachines: async () => INSTALLED_MACHINES,
+    listVendorFilaments: async () => INSTALLED_FILAMENTS,
     ...overrides
   };
 }
+
+const INSTALLED_FILAMENTS = [
+  {
+    vendor: 'BBL',
+    name: 'Bambu PLA Basic @BBL X1C',
+    filament_type: 'PLA',
+    filament_vendor: 'Bambu',
+    compatible_printers: ['Bambu Lab X1 Carbon 0.4 nozzle'],
+    universal: false
+  },
+  {
+    vendor: 'BBL',
+    name: 'Bambu PLA Silk @BBL X1C',
+    filament_type: 'PLA',
+    filament_vendor: 'Bambu',
+    compatible_printers: ['Bambu Lab X1 Carbon 0.4 nozzle'],
+    universal: false
+  },
+  {
+    vendor: 'BBL',
+    name: 'Generic PETG @BBL X1C',
+    filament_type: 'PETG',
+    filament_vendor: 'Generic',
+    compatible_printers: ['Bambu Lab X1 Carbon 0.4 nozzle'],
+    universal: false
+  },
+  {
+    vendor: 'BBL',
+    name: 'Bambu PETG @BBL A1',
+    filament_type: 'PETG',
+    filament_vendor: 'Bambu',
+    compatible_printers: ['Bambu Lab A1 0.4 nozzle'],
+    universal: false
+  }
+];
 
 const INSTALLED_MACHINES = [
   {
@@ -288,6 +324,48 @@ describe('InstalledOrcaEngine (desktop)', () => {
     expect(preset.printerModel).toBe('Bambu Lab X1 Carbon');
   });
 
+  it('lists filaments compatible with a printer selection', async () => {
+    const engine = new InstalledOrcaEngine(fakeBridge());
+    const filaments = await engine.listFilamentsForSelection({
+      printerProfileId: 'bambu-lab-x1-carbon',
+      nozzleDiameterMm: 0.4,
+      slicer: 'orca'
+    });
+    // fake bridge returns the raw list; the engine normalizes to camelCase
+    expect(filaments.map((f) => f.name)).toContain('Bambu PLA Basic @BBL X1C');
+    expect(filaments[0].filamentType).toBe('PLA');
+  });
+
+  it('resolveForMaterial picks a filament for the material and resolves end-to-end', async () => {
+    let captured: { vendor: string; machine: string; process: string; filament: string } | null = null;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        resolvePresetByNames: async (a) => {
+          captured = a;
+          return RESOLVED_PRESET;
+        }
+      })
+    );
+    const preset = await engine.resolveForMaterial(
+      { printerProfileId: 'bambu-lab-x1-carbon', nozzleDiameterMm: 0.4, slicer: 'orca' },
+      'PLA'
+    );
+    // prefers the generic "Basic" PLA over the "Silk" specialty variant
+    expect(captured!.filament).toBe('Bambu PLA Basic @BBL X1C');
+    expect(captured!.machine).toBe('Bambu Lab X1 Carbon 0.4 nozzle');
+    expect(preset.printerModel).toBe('Bambu Lab X1 Carbon');
+  });
+
+  it('resolveForMaterial throws FILAMENT_NOT_FOUND when no material matches', async () => {
+    const engine = new InstalledOrcaEngine(fakeBridge());
+    await expect(
+      engine.resolveForMaterial(
+        { printerProfileId: 'bambu-lab-x1-carbon', nozzleDiameterMm: 0.4, slicer: 'orca' },
+        'PPS'
+      )
+    ).rejects.toThrow(/FILAMENT_NOT_FOUND/);
+  });
+
   it('throws PRINTER_NOT_IN_ORCA when the printer/nozzle is not installed', async () => {
     const engine = new InstalledOrcaEngine(fakeBridge());
     await expect(
@@ -364,6 +442,69 @@ describe('InstalledOrcaEngine.prepareProject', () => {
     expect(merged.enable_pressure_advance).toEqual(['1']);
     expect(capturedAssemble!.outputFileName).toBe('project.3mf');
     expect(capturedAssemble!.sessionId).toBe('sess-1');
+  });
+
+  it('merges calibrated values into the RESOLVED printer config when given a preset', async () => {
+    let capturedAssemble: AssembleProjectArgs | null = null;
+    let readCalled = false;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        readProjectConfig: async () => {
+          readCalled = true;
+          return TEMPLATE_CONFIG;
+        },
+        assembleCalibrationProject: async (a) => {
+          capturedAssemble = a;
+          return ASSEMBLED;
+        }
+      })
+    );
+    await engine.detect();
+    const step = getStepDefinition('pressure-advance')!;
+    const resolvedPreset = {
+      settings: {
+        printer_settings_id: 'Bambu Lab X1 Carbon 0.4 nozzle',
+        nozzle_diameter: ['0.4'],
+        pressure_advance: ['0.02'],
+        enable_pressure_advance: ['0'],
+        filament_flow_ratio: ['0.98']
+      } as Record<string, unknown>,
+      printerModel: 'Bambu Lab X1 Carbon',
+      printerSettingsId: 'Bambu Lab X1 Carbon 0.4 nozzle',
+      source: 'vendor_profile' as const,
+      warnings: []
+    };
+    const prepared = await engine.prepareProject(paSession(), step, resolvedPreset);
+
+    // the template's own config was NOT read — the resolved config is the base
+    expect(readCalled).toBe(false);
+    const merged = JSON.parse(capturedAssemble!.mergedConfigJson);
+    // resolved printer identity is preserved (X1C, not the template's N1)
+    expect(merged.printer_settings_id).toBe('Bambu Lab X1 Carbon 0.4 nozzle');
+    expect(merged.nozzle_diameter).toEqual(['0.4']);
+    // and the session's calibrated PA value is merged in
+    expect(merged.pressure_advance).toEqual(['0.03']);
+    expect(merged.enable_pressure_advance).toEqual(['1']);
+    expect(prepared.sliced).toBe(false);
+  });
+
+  it('falls back to the template config (template printer) when no preset is given', async () => {
+    let capturedAssemble: AssembleProjectArgs | null = null;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        assembleCalibrationProject: async (a) => {
+          capturedAssemble = a;
+          return ASSEMBLED;
+        }
+      })
+    );
+    await engine.detect();
+    const step = getStepDefinition('pressure-advance')!;
+    await engine.prepareProject(paSession(), step);
+    const merged = JSON.parse(capturedAssemble!.mergedConfigJson);
+    // template config carries the N1 printer
+    expect(merged.printer_settings_id).toBe('Bambu Lab N1 0.4 nozzle');
+    expect(merged.pressure_advance).toEqual(['0.03']);
   });
 
   it('rejects a step that needs parameterized generation (bare model)', async () => {
