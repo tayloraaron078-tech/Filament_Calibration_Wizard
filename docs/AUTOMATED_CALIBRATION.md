@@ -5,7 +5,10 @@
 > across multiple stages. The feature is gated behind the
 > `automatedCalibration` experimental flag, which is **off** until the pipeline
 > is complete. The existing manual calibration workflow and the slicer-profile
-> installer are unaffected.
+> installer are unaffected. **Stages 1-7 are complete** (session lifecycle,
+> workflow engine, asset registry, engine layer, project generation for all
+> three calibration-asset kinds, and the guided UX); Stages 8-10 remain before
+> release.
 
 ## Goal
 
@@ -55,10 +58,18 @@ via `--load-settings`/`--load-filaments` is **not** the primary path.
 
 - **Slicing works headless.** A self-contained project 3MF slices to
   `<outputdir>/plate_1.gcode`, exit code 0, with no console.
-- **CLI stdout/stderr is uncapturable.** Orca reroutes CLI output to an attached
-  console (`CONOUT$`), bypassing inherited pipes — capture via pipe, file
-  redirect, and PowerShell all yield nothing. **Success is judged from the
-  output artifact and Orca's log at `<datadir>/log/`, never from stdout.**
+- **CLI stdout/stderr carries little detail, and capturing it is inconsistent
+  across invocation methods.** Redirecting from PowerShell reliably yields
+  nothing; redirecting from bash (`orca-slicer.exe ... > out.log 2> err.log`)
+  does capture *something*, but Windows builds only ever emit a generic
+  `"Slic3r::CLI::run found error, exit"` line — the detailed JSON reason
+  (`record_exit_reson()` in Orca's own `OrcaSlicer.cpp`) is compiled
+  **Linux-only**, so the specific failure (which exit code, which check
+  tripped) never reaches stdout on Windows regardless of how it's captured.
+  **Success is judged from the output artifact and Orca's log at
+  `<datadir>/log/`, never from stdout** — and when a real Orca exit code needs
+  decoding, the authoritative source is Orca's own `src/libslic3r/Utils.hpp`
+  (`#define CLI_* -N`), not anything the process prints.
 - **Always use an isolated `--datadir`.** This gives readable logs and, critically,
   never touches the user's real Orca configuration (`%APPDATA%/OrcaSlicer/`).
 
@@ -114,8 +125,8 @@ Discovery, validation, and slicing are delegated to native Tauri commands in
   under the managed root — never touching the user's real Orca configuration.
 
 `discoverEngines()` summarizes engine status (detected / valid / capabilities /
-recommended engine) for the diagnostics screen; the rendered panel lands with
-the Stage 7 UX (a visible screen now would be dead code while the flag is off).
+recommended engine); the Stage 7 UX (`src/ui/automatedCalibration.ts`, reachable
+at `#/automated/:id`) renders it as a live status card with a re-check action.
 
 ### Project generation (Stage 6)
 
@@ -140,9 +151,34 @@ calibrated values by assembling a complete project 3mf:
 - **Verified end-to-end on real Orca (2.4.2, Windows).** An assembled, modified
   `pa_pattern` project slices headless to a 94 KB `plate_1.gcode`, exit 0.
 
-Support is narrow in this increment: steps whose asset is already a complete
-project (`project-template`, e.g. the pressure-advance pattern). Bare-model
-steps (temperature/flow towers) need parameterized project generation.
+Stage 6 covers all three calibration-asset kinds a project can ship as, each
+verified with a real headless Orca slice:
+
+- **`project-template`** (e.g. pressure-advance) — the case above: the template
+  is already a complete project, so only the config entry is swapped.
+- **`stl`** (the temperature tower) — a bare master STL with no config or plate
+  at all. `model_project.rs` parses the binary STL, cuts it to the material's
+  band count × 10 mm (Orca's own convention, reverse-engineered from real
+  exported Orca artifacts), and synthesizes the missing `3D/3dmodel.model` +
+  `Metadata/model_settings.config` scaffolding a project needs — a bare model
+  plus a config alone does **not** slice (confirmed: Orca rejects it outright,
+  no g-code produced, before this scaffolding was added). The per-band `M104`
+  temperature schedule is injected as `custom_gcode_per_layer.xml`, the same
+  proven injection path as pressure-advance — PerfectFit reproduces Orca's
+  temperatures independently rather than depending on Orca's own (undocumented)
+  temp-tower recognition.
+- **`3mf`** (flow-rate: `flow-pass1`/`flow-pass2`/`flow-verify`) — Orca's
+  shipped multi-object flow plates carry geometry but zero config, similar to
+  the STL case but with 9-11 pre-positioned objects instead of one. The
+  per-object `print_flow_ratio` override mechanism was reverse-engineered from
+  OrcaSlicer's own public source (`Plater::calib_flowrate` in
+  `src/slic3r/GUI/Plater.cpp`): each object's name (e.g. `flowrate_m10`)
+  encodes a modifier, combined with the current flow ratio via one of two
+  formulas (percent or linear/YOLO), serialized as per-object
+  `model_settings.config` metadata. `flow_test.rs` reuses the template's own
+  mesh byte-for-byte and only adds the missing scaffolding + per-object
+  overrides. A real-Orca probe assembling `flowrate-test-pass1.3mf` with
+  computed per-object ratios slices to 1.4 MB of g-code, exit 0.
 
 **Printer preset resolution
 ([`preset_resolver.rs`](../src-tauri/src/slicer_integration/preset_resolver.rs)).**
@@ -164,29 +200,68 @@ machine leaf, whose `default_print_profile` gives the process
 (`InstalledOrcaEngine.resolveForPrinter(selection, filamentName)`). Filament is
 a **separate selection**: Orca machine leaves carry no default filament, and in
 a calibration the material is the thing being tuned, so the caller supplies the
-filament preset. What remains for a full guided session is the material →
-filament-preset choice and the Stage 7 UX around it.
+filament preset (`resolveForMaterial` picks the best installed match for the
+material automatically; the material→filament ranking lives in
+`filamentSelection.ts`).
+
+### Guided session UX (Stage 7)
+
+[`src/ui/automatedCalibration.ts`](../src/ui/automatedCalibration.ts), reachable
+at `#/automated/:id` and linked from the project page once the experimental
+flag is on (`src/ui/settings.ts`):
+
+- **Engine status** — a live card (`discoverEngines()`) with a re-check action.
+- **Starting a session** reuses the printer/nozzle/material the project already
+  has (no separate picker needed for the common case — `resolveForMaterial`
+  maps it automatically); a **manual fallback picker** lists installed Orca
+  machines/filaments directly (`list_installed_machines`/`list_vendor_filaments`)
+  for printers not linked to PerfectFit's printer database (hand-entered
+  profiles) or when the automatic mapping can't find a match. The chosen
+  override (`manualOrcaPreset`) is reused for every later resolve in that
+  session.
+- **Per-step prepare → slice → review**, in place: each ready, slice-needing
+  step gets a "Prepare & slice" action (`prepareProject` → `slice` →
+  `inspectOutput`), rendering success (duration, g-code path, findings, a link
+  into the *existing* manual wizard's result-entry step) or failure (exit
+  code, engine log path, findings). Recording the measured result is
+  deliberately **not** reimplemented — it's identical regardless of how the
+  test was sliced, so a successful slice links straight to
+  `#/wizard/:id/:step` instead of duplicating that UI.
+- **Resume / cancel / restart** — a resumable session surfaces on the
+  dashboard; cancelling (with confirmation) stops it without touching recorded
+  calibration results; a cancelled/failed session offers a fresh restart with
+  the same printer/material (or a re-picked manual override).
+
+This repo's Vitest environment is `'node'`, so no `src/ui/*.ts` file has
+unit-test coverage by convention — this screen is verified by real
+click-through in a dev-server browser (with a faked Tauri bridge standing in
+for the desktop native layer) instead.
 
 ### Relationship to existing code
 
 The automated session **extends the existing `CalibrationProject`** — it is not a
-parallel entity. `AutomatedSessionExtension` documents the (all-optional) fields
-that will fold into `CalibrationProject` when the storage schema is migrated.
-Session state lives in IndexedDB like the rest of the app; only slicer working
-directories and sliced artifacts live on the filesystem.
+parallel entity. `AutomatedSessionExtension`'s (all-optional) fields folded into
+`CalibrationProject` in Stage 2 (storage schema v5, purely additive — no
+`DB_VERSION`/`onupgradeneeded` change was needed since IndexedDB already stores
+whatever optional fields an object carries). Session state lives in IndexedDB
+like the rest of the app; only slicer working directories and sliced artifacts
+live on the filesystem.
 
 ## Expected filesystem layout (engine + jobs)
 
-Documented here; the engine manager that creates it is implemented in a later
-stage. Everything lives under an application-managed root, isolated per session
-and per job:
+The `sessions/<id>/jobs/<id>/{workspace,datadir,out}` layout below is
+implemented and in active use since Stage 5 (the process runner) and Stage 6
+(project assembly). Only `engines/managed-orca/` — a bundled/downloaded Orca
+binary — remains future work (Stage 9); today `InstalledOrcaEngine` only ever
+points at the user's own install, never a managed one. Everything lives under
+an application-managed root, isolated per session and per job:
 
 ```
 <app-data>/perfectfit/
   engines/
     managed-orca/
       manifest.json            # engine id, upstream version, checksum, capabilities
-      bin/…                    # the managed Orca executable (optional feature)
+      bin/…                    # the managed Orca executable (Stage 9)
   sessions/
     <sessionId>/
       jobs/
@@ -196,8 +271,9 @@ and per job:
           out/                 # sliced artifacts (plate_1.gcode, …)
 ```
 
-No Orca executable is bundled in the repository. The managed engine is an
-optional, separately-packaged component added in a later stage.
+No Orca executable is bundled in the repository. The managed engine is a
+separately-packaged component targeted for Stage 9 — see the note under
+"Staged delivery" on why it's required, not optional, for release.
 
 ## Staged delivery
 
@@ -213,11 +289,18 @@ and leaves the automated behavior disabled until it is ready.
 | 3 | Workflow registry + result inheritance / stale-job invalidation |
 | 4 | Calibration asset registry + project preparation (unsliced workspace) |
 | 5 | Engine discovery/validation + safe process runner |
-| 6 | Orca project generation + automated slicing MVP (narrow support matrix) |
+| 6 | Orca project generation + automated slicing (all calibration-asset kinds) |
 | 7 | End-to-end guided automated session UX |
 | 8 | Finish Calibration — profile export/install (wraps the verified installer) |
-| 9 | Optional managed Orca engine + packaging + third-party notices |
+| 9 | Managed Orca engine + packaging + third-party notices |
 | 10 | Hardening, compatibility matrix, docs, beta prep |
+
+Stage 9 is **not optional**: at release, PerfectFit has no way to know whether a
+given user has OrcaSlicer installed at all — many print with Bambu Studio (or
+another slicer) exclusively and have never installed Orca. Without a managed
+engine, the automated pipeline only ever benefits users who already happen to
+have Orca on their machine; everyone else keeps the manual workflow with no
+automation, regardless of how complete Stages 1-8 are.
 
 ## Licensing note
 
