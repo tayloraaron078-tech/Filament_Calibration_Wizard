@@ -7,8 +7,9 @@
 //!
 //! Verified slicer data (folder names, executables, process names) comes from
 //! docs/SLICER_PROFILE_RESEARCH.md. Do not add entries without verification.
-//! Anything not yet verified on a real install (currently: the Linux `comm=`
-//! process names for Orca/Bambu) is marked provisional inline and in that doc.
+//! Anything not yet verified on a real install is marked provisional inline and
+//! in that doc — currently: the Linux layout for Snapmaker Orca, ElegooSlicer,
+//! and Flash Studio (intentionally empty `linux_exe_candidates`).
 
 pub mod backup;
 pub mod discovery;
@@ -43,8 +44,10 @@ pub const SLICERS: &[SlicerDescriptor] = &[
         // Native package (/usr/bin/orca-slicer) and AppImage-style integration
         // (/opt/orca-slicer/AppRun), both verified 2026-07-28 on Linux.
         linux_exe_candidates: &["orca-slicer", "orca-slicer/AppRun"],
-        // Linux comm= name unconfirmed — provisional, see docs/SLICER_PROFILE_RESEARCH.md and issue #26
-        process_names: &["orca-slicer.exe", "OrcaSlicer", "orca-slicer"],
+        // Linux comm= name confirmed 2026-07-28 via `ps -axo comm=` against a
+        // running instance (likely truncated at the 15-byte Linux comm limit —
+        // matching is fine either way since detection uses the same `ps` call).
+        process_names: &["orca-slicer.exe", "OrcaSlicer", "orcaslicer_main"],
     },
     SlicerDescriptor {
         id: "bambu",
@@ -54,8 +57,9 @@ pub const SLICERS: &[SlicerDescriptor] = &[
         macos_app_candidates: &["BambuStudio.app"],
         // Native package (/usr/bin/bambu-studio), verified 2026-07-28 on Linux.
         linux_exe_candidates: &["bambu-studio"],
-        // Linux comm= name unconfirmed — provisional, see docs/SLICER_PROFILE_RESEARCH.md and issue #26
-        process_names: &["bambu-studio.exe", "BambuStudio", "bambu-studio"],
+        // Linux comm= name confirmed 2026-07-28 via `ps -axo comm=` against a
+        // running instance.
+        process_names: &["bambu-studio.exe", "BambuStudio", "bambustu_main"],
     },
     SlicerDescriptor {
         id: "snapmaker-orca",
@@ -124,4 +128,24 @@ pub fn now_unix() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pins the confirmed Linux `comm=` names (docs/SLICER_PROFILE_RESEARCH.md,
+    /// verified 2026-07-28 via `ps -axo comm=` against live instances). Neither
+    /// is the plain executable basename — that was the original, wrong guess —
+    /// so this guards against silently reverting to it.
+    #[test]
+    fn linux_process_names_match_confirmed_comm_output() {
+        let orca = descriptor("orca").unwrap();
+        assert!(orca.process_names.contains(&"orcaslicer_main"));
+        assert!(!orca.process_names.contains(&"orca-slicer"));
+
+        let bambu = descriptor("bambu").unwrap();
+        assert!(bambu.process_names.contains(&"bambustu_main"));
+        assert!(!bambu.process_names.contains(&"bambu-studio"));
+    }
 }

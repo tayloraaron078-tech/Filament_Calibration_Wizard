@@ -161,7 +161,9 @@ slicer (removing the cloud copy) and reinstalled.
   (`$XDG_CONFIG_HOME` unset → `~/.config`), executable at `/usr/bin/orca-slicer`
   (also found via a `.desktop` entry pointing at `/opt/orca-slicer/AppRun`, an
   AppImage-style integration — both supported). Running-process `comm=` name
-  **not yet confirmed** — see issue #26.
+  confirmed via `ps -axo comm=` against a live instance: `orcaslicer_main` (likely
+  truncated at the 15-byte Linux `comm` limit; not the plain executable basename we
+  originally guessed).
 
 ### 2. Bambu Studio
 
@@ -176,8 +178,9 @@ slicer (removing the cloud copy) and reinstalled.
 - `filament_inventory/`, `track/`, `cache/` are unrelated; do not touch.
 - macOS (**unverified locally**): `~/Library/Application Support/BambuStudio`.
 - Linux (verified 2026-07-28, native install): data at `~/.config/BambuStudio/`,
-  executable at `/usr/bin/bambu-studio`. Running-process `comm=` name
-  **not yet confirmed** — see issue #26.
+  executable at `/usr/bin/bambu-studio`. Running-process `comm=` name confirmed via
+  `ps -axo comm=` against a live instance: `bambustu_main` (not the plain executable
+  basename we originally guessed).
 
 ### 3. Snapmaker Orca
 
@@ -246,13 +249,16 @@ Notes:
 ## Unverified items (kept out of default behavior)
 
 - macOS paths for all five slicers (documented upstream, not yet inspected here).
-- Linux, partially verified as of 2026-07-28:
+- Linux, mostly verified as of 2026-07-28 for two of the five slicers:
   - Orca Slicer and Bambu Studio: data directory (`~/.config/OrcaSlicer/`,
-    `~/.config/BambuStudio/`) and executable paths (`/usr/bin/orca-slicer` incl. the
-    `/opt/orca-slicer/AppRun` AppImage variant, `/usr/bin/bambu-studio`) are verified
-    on a real native install; **their running-process `comm=` names are still
-    unverified** — the extra lowercase `orca-slicer`/`bambu-studio` entries in
-    `SLICERS.process_names` are a provisional guess (see issue #26).
+    `~/.config/BambuStudio/`), executable paths (`/usr/bin/orca-slicer` incl. the
+    `/opt/orca-slicer/AppRun` AppImage variant, `/usr/bin/bambu-studio`), and
+    running-process `comm=` names (`orcaslicer_main`, `bambustu_main` — confirmed via
+    `ps -axo comm=` against live instances, and notably **not** the plain executable
+    basenames originally guessed as a placeholder) are all verified on a real native
+    install. Native direct-install (writing a profile into the slicer, as opposed to
+    detection/launch) is intentionally still gated off on Linux in
+    `src/slicerIntegration/registry.ts` pending an end-to-end install/rollback test.
   - Snapmaker Orca, ElegooSlicer, Flash Studio: **completely unverified on Linux**
     (`linux_exe_candidates` deliberately left empty; no data-dir or executable
     inspection done).
