@@ -5,14 +5,19 @@
 > across multiple stages. The feature is gated behind the
 > `automatedCalibration` experimental flag, which is **off** until the pipeline
 > is complete. The existing manual calibration workflow and the slicer-profile
-> installer are unaffected. **Stages 1-8 are complete** (session lifecycle,
-> workflow engine, asset registry, engine layer, project generation for all
-> three calibration-asset kinds, the guided UX, and the finish handoff into the
-> profile generator/installer). **Stage 9 (managed Orca engine) is built for
-> Windows** — detection, download-on-demand acquisition, and the opt-in UX are
-> in place (Linux/macOS acquisition is a tracked follow-up). Stage 10
-> (hardening, compat matrix, beta prep) remains, and the third-party notices
-> need owner legal review before any public distribution.
+> installer are unaffected. **Stages 1-9 are complete for Windows** (session
+> lifecycle, workflow engine, asset registry, engine layer, project generation
+> for all three calibration-asset kinds, the guided UX, the finish handoff into
+> the profile generator/installer, and the managed Orca engine — detection,
+> download-on-demand acquisition, and the opt-in UX). **Stage 10 (hardening,
+> compatibility matrix, docs, beta prep) is in progress:** the supervised
+> real-Orca test probes are now environment-driven and runnable on any
+> Orca-equipped machine, with an opt-in integration CI lane that fetches the
+> pinned build and runs them (see [Running the real-Orca probes](#running-the-real-orca-probes)).
+> Still open: Linux/macOS managed-engine acquisition (see
+> [`LINUX_MANAGED_ORCA.md`](LINUX_MANAGED_ORCA.md)), owner legal review of the
+> third-party notices before any public distribution, and flipping the feature
+> flag on for beta.
 
 ## Goal
 
@@ -317,11 +322,78 @@ disclosure that this installs OrcaSlicer, a **separate** open-source program
 legal review before any public distribution.**
 
 **Platform scope.** Only the **Windows x64** build is pinned so far (the
-version the whole pipeline was verified against). Linux ships an AppImage whose
-`resources/` are packed inside a self-mounting squashfs rather than beside the
-executable, so it needs different handling (`--appimage-extract` or a
-special-cased validation) *and* verification on real Linux — a tracked
-follow-up. macOS is de-prioritized.
+version the whole pipeline was verified against). `PINNED_MANAGED_ORCA` is the
+single source of truth — it is `None` on every other platform, so
+`download_managed_orca` refuses with a clear "no managed build for this platform
+yet — install OrcaSlicer manually" message rather than failing silently. On
+non-Windows the managed engine therefore degrades honestly to Path A/C (use an
+installed Orca, or the manual workflow). Linux is the next target (see
+[`LINUX_MANAGED_ORCA.md`](LINUX_MANAGED_ORCA.md)); macOS is de-prioritized.
+
+> **Follow-up (lands with Linux support):** today the Path-B *"Install
+> OrcaSlicer for PerfectFit"* offer still renders on non-Windows and only
+> reports "not available for this platform" on click. When a second platform is
+> pinned, gate the offer on a native availability signal derived from
+> `PINNED_MANAGED_ORCA` (not a duplicated frontend platform check) so the button
+> is shown exactly where a managed build can actually install — one source of
+> truth, no drift.
+
+### Hardening & release readiness (Stage 10)
+
+Stage 10 does not add pipeline features; it makes the Windows-complete pipeline
+releasable — test visibility, cross-platform honesty, docs, and merge prep.
+
+#### Platform & engine support matrix
+
+Where the automated pipeline can slice today, by platform × engine source. "Path
+A/B/C" are the acquisition paths from [Managed Orca engine](#managed-orca-engine-stage-9).
+
+| Platform    | Installed Orca (Path A) | Managed Orca (Path B) | Manual export | Direct profile install |
+|-------------|-------------------------|-----------------------|---------------|------------------------|
+| Windows x64 | ✅ verified (2.4.2)      | ✅ verified (pinned)   | ✅ always      | ✅ verified (5 slicers) |
+| Linux       | ⚠️ untested¹            | ❌ not built²          | ✅ always      | ⚠️ unconfirmed          |
+| macOS       | ⚠️ untested¹            | ❌ de-prioritized      | ✅ always      | ⚠️ export-only          |
+
+1. `InstalledOrcaEngine` is platform-neutral in principle (it drives whatever
+   vetted `orca-slicer` executable the manifest records), but the slice/resolve
+   pipeline has only been *proven* on Windows. The probes are now portable
+   (below), so a Linux/macOS box with Orca can validate it.
+2. No managed build is pinned — see [`LINUX_MANAGED_ORCA.md`](LINUX_MANAGED_ORCA.md).
+
+#### Running the real-Orca probes
+
+The supervised, real-Orca tests are Rust `#[ignore]`d probes (they drive an
+actual OrcaSlicer install, so they can't run in the normal unit lane — GitHub's
+default runners and Orca-less dev machines have no Orca). They are **environment
+-driven** (`slicer_integration::test_support`), so any Orca-equipped machine can
+run them — not just the box they were authored on:
+
+- `PERFECTFIT_ORCA_ROOT` — the OrcaSlicer install root (defaults to
+  `C:\Program Files\OrcaSlicer`). The probes derive the executable and
+  `resources/{calib,profiles}` from it.
+- `PERFECTFIT_ORCA_ZIP` — a downloaded `OrcaSlicer_Windows_V2.4.2_x64_portable.zip`
+  for the download-staging probe; unset means that one probe skips cleanly.
+
+```bash
+# From src-tauri/. Runs the seven Orca-resource probes against the default install:
+cargo test --lib -- --ignored --nocapture \
+  engine::tests::probe_stage_real_orca_zip flow_test:: model_project:: \
+  preset_resolver:: project_assembly::
+
+# Or point at a non-default install:
+PERFECTFIT_ORCA_ROOT="/opt/OrcaSlicer" cargo test --lib -- --ignored preset_resolver::
+```
+
+The installer's own probes (`discovery::…::probe_real_*`, `install::…::manual_*`)
+need a slicer *installed* in the OS's normal locations (plus `MANUAL_*` paths)
+and are a separate concern from automated-calibration slicing.
+
+**Integration CI lane** ([`.github/workflows/integration.yml`](../.github/workflows/integration.yml)):
+a `workflow_dispatch`-only job (never on push/PR — it downloads ~171 MB and runs
+real slices) that fetches the pinned Orca build, verifies its checksum+size
+against the same pin as the app, sets `PERFECTFIT_ORCA_ROOT`, and runs the seven
+resource probes. This is how the `#[ignore]`d probes get exercised in CI without
+breaking the fast unit lane.
 
 ### Relationship to existing code
 
