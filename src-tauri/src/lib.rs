@@ -84,6 +84,8 @@ pub fn run() {
       engine::download_managed_orca,
       engine::run_calibration_slice,
       engine::cancel_calibration_slice,
+      engine::open_calibration_project,
+      engine::reveal_calibration_output,
       project_assembly::read_project_config,
       project_assembly::assemble_calibration_project,
       preset_resolver::resolve_printer_preset,

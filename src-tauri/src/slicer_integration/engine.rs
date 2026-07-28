@@ -1014,6 +1014,64 @@ pub fn cancel_calibration_slice(cancellation_token: String) -> Result<bool, Stri
     }
 }
 
+/// Open a sliced calibration job's assembled project (the `.3mf` PerfectFit
+/// staged, with the session's calibrated values baked in) in the Orca GUI so the
+/// user can send it to their printer / export it to SD. Launches the SAME
+/// manifest-vetted engine that sliced it, with the staged project — never an
+/// arbitrary executable or file path (the frontend passes only validated
+/// session/job ids and the project file name, exactly like the slice runner).
+/// The GUI runs independently of PerfectFit; this returns as soon as it launches.
+#[tauri::command]
+pub fn open_calibration_project(
+    engine_id: String,
+    session_id: String,
+    job_id: String,
+    project_file_name: String,
+) -> Result<(), String> {
+    if engine_id != INSTALLED_ORCA && engine_id != MANAGED_ORCA {
+        return Err(format!("Engine '{engine_id}' cannot open a project"));
+    }
+    let engines_dir = security::engines_root()?;
+    let manifest = read_manifest_from(&engines_dir, &engine_id)?
+        .ok_or_else(|| "Engine not detected — run detection first".to_string())?;
+    let exe = PathBuf::from(&manifest.executable_path);
+    if !exe.is_file() {
+        return Err("Engine executable is missing — re-run detection".into());
+    }
+    security::validate_component(&project_file_name)?;
+    if !project_file_name.to_ascii_lowercase().ends_with(".3mf") {
+        return Err("Project file must be a .3mf".into());
+    }
+    let job = security::job_root(&session_id, &job_id)?;
+    let project = job.join("workspace").join(&project_file_name);
+    if !project.is_file() {
+        return Err(format!(
+            "Sliced project not found: {} — prepare and slice the test first",
+            project.display()
+        ));
+    }
+    // Launch the GUI with the project (no --slice → opens it interactively). The
+    // spawned child is intentionally detached; dropping it does not terminate it.
+    Command::new(&exe)
+        .arg(&project)
+        .spawn()
+        .map_err(|e| format!("Failed to open the slicer: {e}"))?;
+    Ok(())
+}
+
+/// Reveal a sliced calibration job's output folder (the staged project plus the
+/// sliced g-code) in the OS file manager, so the user can copy the g-code to an
+/// SD card or open it in any slicer. Confined to the job's own managed root.
+#[tauri::command]
+pub fn reveal_calibration_output(session_id: String, job_id: String) -> Result<(), String> {
+    let job = security::job_root(&session_id, &job_id)?;
+    // Prefer the output dir (holds the sliced g-code); fall back to the workspace
+    // (holds the assembled project) before the slice has produced output.
+    let out = job.join("out");
+    let target = if out.is_dir() { out } else { job.join("workspace") };
+    super::processes::open_directory_checked(&target, &[job])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

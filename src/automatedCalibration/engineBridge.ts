@@ -61,6 +61,18 @@ export interface RunSliceArgs {
   cancellationToken?: string;
 }
 
+export interface OpenProjectArgs {
+  engineId: EngineId;
+  sessionId: string;
+  jobId: string;
+  projectFileName: string;
+}
+
+export interface RevealOutputArgs {
+  sessionId: string;
+  jobId: string;
+}
+
 export interface RawAssembledProject {
   project_file_name: string;
   project_path: string;
@@ -174,6 +186,12 @@ export interface EngineNativeBridge {
   downloadManagedOrca(cancellationToken?: string): Promise<RawEngineDetection>;
   runCalibrationSlice(args: RunSliceArgs): Promise<RawSliceRun>;
   cancelCalibrationSlice(cancellationToken: string): Promise<boolean>;
+  /** Open a sliced job's assembled project in the vetted Orca GUI so the user
+   *  can print it / export to SD. Launches the same engine that sliced it. */
+  openCalibrationProject(args: OpenProjectArgs): Promise<void>;
+  /** Reveal a sliced job's output folder (staged project + g-code) in the OS
+   *  file manager, for copying the g-code to an SD card or any other slicer. */
+  revealCalibrationOutput(args: RevealOutputArgs): Promise<void>;
   /** Read a template project 3mf's project_settings.config text. */
   readProjectConfig(templatePath: string): Promise<string>;
   /** Stage a complete project 3mf (template + merged config) into the job. */
@@ -251,6 +269,20 @@ export const nativeEngineBridge: EngineNativeBridge = {
   },
   cancelCalibrationSlice(cancellationToken) {
     return invoke<boolean>('cancel_calibration_slice', { cancellationToken });
+  },
+  openCalibrationProject(args) {
+    return invoke<void>('open_calibration_project', {
+      engineId: args.engineId,
+      sessionId: args.sessionId,
+      jobId: args.jobId,
+      projectFileName: args.projectFileName
+    });
+  },
+  revealCalibrationOutput(args) {
+    return invoke<void>('reveal_calibration_output', {
+      sessionId: args.sessionId,
+      jobId: args.jobId
+    });
   },
   readProjectConfig(templatePath) {
     return invoke<string>('read_project_config', { templatePath });

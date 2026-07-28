@@ -403,13 +403,52 @@ async function prepareAndSlice(args: {
   clear(resultBox);
 
   if (job.succeeded) {
+    // The sliced test lives under the managed job root; give the user a real way
+    // to actually print it — open the assembled plate in the Orca that sliced it
+    // (send to printer / export to SD from there), or reveal the folder so the
+    // g-code can go to an SD card or any other slicer.
+    const projectFileName = prepared.projectFilePath
+      ? (prepared.projectFilePath.split(/[\\/]/).pop() ?? 'project.3mf')
+      : 'project.3mf';
+
+    const openBtn = h('button', { class: 'btn btn-primary btn-sm' },
+      `🖨 Open in ${engine.displayName}`) as HTMLButtonElement;
+    openBtn.addEventListener('click', async () => {
+      try {
+        await nativeEngineBridge.openCalibrationProject({
+          engineId: engine.id,
+          sessionId: prepared.projectId,
+          jobId: prepared.id,
+          projectFileName
+        });
+        toast(`Opening the sliced test in ${engine.displayName} — send it to your printer or export to SD from there.`, 'success');
+      } catch (err) {
+        toast(`Could not open the slicer: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      }
+    });
+
+    const revealBtn = h('button', { class: 'btn btn-sm' }, '📂 Show sliced files') as HTMLButtonElement;
+    revealBtn.addEventListener('click', async () => {
+      try {
+        await nativeEngineBridge.revealCalibrationOutput({
+          sessionId: prepared.projectId,
+          jobId: prepared.id
+        });
+      } catch (err) {
+        toast(`Could not open the folder: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      }
+    });
+
     resultBox.append(h('div', { class: 'callout callout-ok' },
-      h('p', {}, `✓ Sliced in ${(job.durationMs / 1000).toFixed(1)}s.`),
+      h('p', {}, `✓ Sliced in ${(job.durationMs / 1000).toFixed(1)}s. Print it, then measure and record your result.`),
       job.outputGcodePath ? h('p', { class: 'field-help' }, job.outputGcodePath) : null,
       inspection.findings.length ? h('ul', {}, inspection.findings.map(f => h('li', {}, f))) : null,
+      h('div', { class: 'btn-row' }, openBtn, revealBtn),
+      h('p', { class: 'field-help' },
+        `“Open in ${engine.displayName}” loads the sliced plate so you can send it to your printer or export to SD. “Show sliced files” opens the folder — the g-code there can go on an SD card or into any other slicer (Bambu Studio, etc.).`),
       h('div', { class: 'btn-row' },
-        h('a', { class: 'btn btn-primary btn-sm', href: `#/wizard/${session.id}/${stepDef.id}` },
-          '→ Print it, then record your result'))
+        h('a', { class: 'btn btn-sm', href: `#/wizard/${session.id}/${stepDef.id}` },
+          '→ Record your measured result'))
     ));
   } else {
     resultBox.append(h('div', { class: 'callout callout-bad' },
