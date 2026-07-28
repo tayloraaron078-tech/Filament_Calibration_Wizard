@@ -260,9 +260,13 @@ Adding a calibration test = new entry in `data/calibrations.ts` + a form control
 - The QR code on the calibration card links to the app URL + project id — it opens the saved
   calibration on any device pointed at the **same hosted instance & browser profile**; it does
   not embed the data itself (the printed card carries the values in plain text).
-- No slicer preset **file** export: Orca/Bambu preset JSON formats are version-volatile and
-  were not safely verifiable for round-tripping, so the app deliberately guides manual entry
-  instead of risking a broken preset. (Candidate for a future "experimental" feature.)
+- **Direct slicer profile installation is experimental and Windows-verified only.**
+  PerfectFit can generate, diff, validate, and export calibrated filament presets for the
+  Orca-family slicers (Orca Slicer, Bambu Studio, Snapmaker Orca, ElegooSlicer, Flash Studio /
+  Orca-Flashforge) behind an experimental feature flag. Exporting a preset file works on any
+  platform, including the browser build. Writing the preset directly into a slicer's profile
+  folder is currently verified on Windows only, per slicer version — export remains the safe
+  fallback everywhere else.
 - Photos are stored and exported but not analyzed (AI photo evaluation is a designed-for,
   not-built v1 exclusion, like accounts, cloud sync, and printer control).
 - Bambu Studio Developer mode exposes retraction, Max flowrate, and VFA calibration while a Bambu printer is selected; external models remain fallback options
@@ -291,8 +295,8 @@ Version 1.4.0 is already in active development and aims to significantly streaml
 ## Future ideas
 
 AI-assisted photo evaluation (storage schema already reserves an `analysis` field), photo
-comparison, multiple nozzles/printers per filament, printer API integration, experimental
-slicer preset export, community preset sharing, filament inventory with drying/spool tracking.
+comparison, multiple nozzles/printers per filament, printer API integration, community preset
+sharing, filament inventory with drying/spool tracking.
 
 ## License
 
