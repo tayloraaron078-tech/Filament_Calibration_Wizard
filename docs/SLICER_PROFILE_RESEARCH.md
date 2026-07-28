@@ -157,6 +157,11 @@ slicer (removing the cloud copy) and reinstalled.
   version upgrades. Do not scan them as live presets.
 - macOS (documented in official repo; **unverified locally — no macOS machine yet**):
   data at `~/Library/Application Support/OrcaSlicer`, app at `/Applications/OrcaSlicer.app`.
+- Linux (verified 2026-07-28, native install): data at `~/.config/OrcaSlicer/`
+  (`$XDG_CONFIG_HOME` unset → `~/.config`), executable at `/usr/bin/orca-slicer`
+  (also found via a `.desktop` entry pointing at `/opt/orca-slicer/AppRun`, an
+  AppImage-style integration — both supported). Running-process `comm=` name
+  **not yet confirmed** — see issue #26.
 
 ### 2. Bambu Studio
 
@@ -170,6 +175,9 @@ slicer (removing the cloud copy) and reinstalled.
   preset; both shapes must parse.
 - `filament_inventory/`, `track/`, `cache/` are unrelated; do not touch.
 - macOS (**unverified locally**): `~/Library/Application Support/BambuStudio`.
+- Linux (verified 2026-07-28, native install): data at `~/.config/BambuStudio/`,
+  executable at `/usr/bin/bambu-studio`. Running-process `comm=` name
+  **not yet confirmed** — see issue #26.
 
 ### 3. Snapmaker Orca
 
@@ -238,7 +246,20 @@ Notes:
 ## Unverified items (kept out of default behavior)
 
 - macOS paths for all five slicers (documented upstream, not yet inspected here).
-- Linux paths and native slicer integration behavior (Linux desktop packages are built, but profile detection/install is not yet verified).
+- Linux, partially verified as of 2026-07-28:
+  - Orca Slicer and Bambu Studio: data directory (`~/.config/OrcaSlicer/`,
+    `~/.config/BambuStudio/`) and executable paths (`/usr/bin/orca-slicer` incl. the
+    `/opt/orca-slicer/AppRun` AppImage variant, `/usr/bin/bambu-studio`) are verified
+    on a real native install; **their running-process `comm=` names are still
+    unverified** — the extra lowercase `orca-slicer`/`bambu-studio` entries in
+    `SLICERS.process_names` are a provisional guess (see issue #26).
+  - Snapmaker Orca, ElegooSlicer, Flash Studio: **completely unverified on Linux**
+    (`linux_exe_candidates` deliberately left empty; no data-dir or executable
+    inspection done).
+  - Non-native distribution channels (Flatpak, Snap, a bare AppImage placed outside
+    `/opt` or `$PATH`) are unverified for every slicer; their data directories are
+    remapped or their launch mechanism is not a plain executable path.
+  - Install behavior on Linux is untested end-to-end regardless of detection.
 - Whether each slicer tolerates a missing `.info` for a new preset (observed existing
   presets without sidecars in Orca-Flashforge, so likely; we always write one anyway).
 - Bambu Studio cloud re-sync behavior for presets written into an account dir.
