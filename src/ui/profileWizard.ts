@@ -31,7 +31,7 @@ import { errorTemplate } from '../slicerIntegration/errors';
 
 type Stage = 'slicer' | 'profiles' | 'configure' | 'preview' | 'result';
 
-interface WizState {
+export interface WizState {
   stage: Stage;
   installations: SlicerInstallation[] | null;
   installation: SlicerInstallation | null;
@@ -80,7 +80,7 @@ function stateFor(projectId: string): WizState {
 // This wizard keeps its state only in `states` (memory) — unlike the calibration
 // wizard there is no draft persistence, so leaving the view really does discard
 // the scan, the base-profile choice and the generated preview.
-function hasProgressToLose(st: WizState): boolean {
+export function hasProgressToLose(st: WizState): boolean {
   if (st.completed) return false;
   if (st.stage !== 'slicer') return true;
   // On the first stage only a completed scan or an already-picked base profile
