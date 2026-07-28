@@ -432,9 +432,10 @@ mod tests {
     #[test]
     #[ignore]
     fn probe_real_flow_test_slice() {
+        use crate::slicer_integration::test_support;
         use std::process::{Command, Stdio};
-        let orca = Path::new("C:/Program Files/OrcaSlicer/orca-slicer.exe");
-        let template = Path::new("C:/Program Files/OrcaSlicer/resources/calib/filament_flow/flowrate-test-pass1.3mf");
+        let orca = test_support::orca_exe();
+        let template = test_support::orca_calib("filament_flow/flowrate-test-pass1.3mf");
         if !orca.is_file() || !template.is_file() {
             eprintln!("SKIP: Orca / flow template not present");
             return;
@@ -514,7 +515,7 @@ mod tests {
         let outdir = d.join("out");
         std::fs::create_dir_all(&datadir).unwrap();
         std::fs::create_dir_all(&outdir).unwrap();
-        let status = Command::new(orca)
+        let status = Command::new(&orca)
             .arg("--datadir").arg(&datadir)
             .arg("--outputdir").arg(&outdir)
             .arg("--slice").arg("0")

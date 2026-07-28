@@ -270,86 +270,14 @@ mod tests {
         assert!(validate_3mf("C:/nope/missing.3mf").is_err());
     }
 
-    /// Supervised de-risk for parameterized generation (Stage 6 incr. 3): can we
-    /// build a sliceable project AROUND a bare model-only 3mf by injecting a
-    /// `project_settings.config` plus a generated `custom_gcode_per_layer.xml`,
-    /// and does Orca actually act on our temperature (M104) injections? Uses the
-    /// model-only `flowrate-test-pass1.3mf` as the bare model and a shipped
-    /// project's config as a stand-in donor (the resolver is proven separately).
-    /// Run with `cargo test -- --ignored probe_model_only_wrap_and_temp_inject`.
-    #[test]
-    #[ignore]
-    fn probe_model_only_wrap_and_temp_inject() {
-        use std::process::{Command, Stdio};
-        let orca = Path::new("C:/Program Files/OrcaSlicer/orca-slicer.exe");
-        let bare_model = Path::new("C:/Program Files/OrcaSlicer/resources/calib/filament_flow/flowrate-test-pass1.3mf");
-        let config_donor = Path::new("C:/Program Files/OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf");
-        if !orca.is_file() || !bare_model.is_file() || !config_donor.is_file() {
-            eprintln!("SKIP: Orca / model / donor not present");
-            return;
-        }
-        let d = temp_dir("wrapinject");
-
-        // Donor config (stands in for a resolved config here).
-        let cfg = read_project_config(config_donor.display().to_string()).unwrap();
-
-        // Generated temperature custom-gcode (mirrors the TS serializer shape:
-        // type=4 Custom, M104 S<temp>, at several low layer tops).
-        let temps = [("0.4", 240), ("0.8", 235), ("1.2", 230), ("1.6", 225)];
-        let mut xml = String::from(
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<custom_gcodes_per_layer>\n<plate>\n<plate_info id=\"1\"/>\n",
-        );
-        for (z, t) in temps {
-            xml.push_str(&format!(
-                "<layer top_z=\"{z}\" type=\"4\" extruder=\"-858993460\" color=\"\" extra=\"M104 S{t}\"/>\n"
-            ));
-        }
-        xml.push_str("</plate>\n</custom_gcodes_per_layer>\n");
-
-        // Assemble: bare model 3mf + injected config + injected custom gcode.
-        let project = d.join("project.3mf");
-        let (added, count) = repackage_with_entries(
-            bare_model,
-            &[
-                ("Metadata/project_settings.config", cfg.as_bytes()),
-                ("Metadata/custom_gcode_per_layer.xml", xml.as_bytes()),
-            ],
-            &project,
-        )
-        .unwrap();
-        println!("added entries to model-only 3mf: {added:?} (total now {count})");
-        assert!(added.iter().any(|n| n.contains("project_settings.config")), "config should be ADDED to a model-only 3mf");
-
-        // Slice headless into an isolated datadir.
-        let datadir = d.join("datadir");
-        let outdir = d.join("out");
-        std::fs::create_dir_all(&datadir).unwrap();
-        std::fs::create_dir_all(&outdir).unwrap();
-        let status = Command::new(orca)
-            .arg("--datadir").arg(&datadir)
-            .arg("--outputdir").arg(&outdir)
-            .arg("--slice").arg("0")
-            .arg(&project)
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-            .status()
-            .expect("failed to launch orca");
-        let gcode = outdir.join("plate_1.gcode");
-        println!("orca exit={:?} gcode_exists={}", status.code(), gcode.is_file());
-        if !gcode.is_file() {
-            eprintln!("FINDING: a model-only 3mf + injected config did NOT slice — needs build/model_settings.");
-            std::fs::remove_dir_all(&d).ok();
-            return; // record the finding rather than hard-fail the supervised probe
-        }
-        let text = std::fs::read_to_string(&gcode).unwrap_or_default();
-        let injected: Vec<i32> = temps
-            .iter()
-            .filter(|(_, t)| text.contains(&format!("M104 S{t}")))
-            .map(|(_, t)| *t)
-            .collect();
-        println!("gcode {} bytes; injected temps present: {injected:?}", text.len());
-        assert!(!injected.is_empty(), "expected at least one injected M104 temperature in the g-code");
-        std::fs::remove_dir_all(&d).ok();
-    }
+    // NOTE (Stage 10 cleanup): `probe_model_only_wrap_and_temp_inject` was removed
+    // here. It was a one-off de-risking probe that proved a NEGATIVE — a bare
+    // model-only 3mf with only a `project_settings.config` + `custom_gcode` injected
+    // does NOT slice (Orca exits -101 without the plate/model_instance scaffolding).
+    // That finding is settled and documented (HQ DECISIONS/STATUS), and the POSITIVE
+    // counterpart — synthesizing the scaffolding makes it slice — is guarded by
+    // `model_project`'s hermetic assemble tests + its real-Orca probe. Keeping a
+    // supervised test that only asserts a non-feature added no regression value.
 
     /// End-to-end pipeline proof on the real installed Orca (supervised):
     /// read a shipped calib project's config, change a filament value, repackage
@@ -359,10 +287,10 @@ mod tests {
     #[test]
     #[ignore]
     fn probe_real_orca_slice_of_assembled_project() {
+        use crate::slicer_integration::test_support;
         use std::process::{Command, Stdio};
-        let orca = Path::new("C:/Program Files/OrcaSlicer/orca-slicer.exe");
-        let template =
-            Path::new("C:/Program Files/OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf");
+        let orca = test_support::orca_exe();
+        let template = test_support::orca_calib("pressure_advance/pa_pattern.3mf");
         if !orca.is_file() || !template.is_file() {
             eprintln!("SKIP: OrcaSlicer or pa_pattern.3mf not present");
             return;
@@ -377,7 +305,7 @@ mod tests {
         let merged = serde_json::to_string_pretty(&cfg).unwrap();
 
         let project = d.join("project.3mf");
-        let (replaced, count) = repackage_with_config(template, &merged, &project).unwrap();
+        let (replaced, count) = repackage_with_config(&template, &merged, &project).unwrap();
         assert!(replaced, "template should have had a project config");
         assert!(count > 3, "expected the full project's entries");
 
@@ -386,7 +314,7 @@ mod tests {
         let outdir = d.join("out");
         std::fs::create_dir_all(&datadir).unwrap();
         std::fs::create_dir_all(&outdir).unwrap();
-        let status = Command::new(orca)
+        let status = Command::new(&orca)
             .arg("--datadir")
             .arg(&datadir)
             .arg("--outputdir")

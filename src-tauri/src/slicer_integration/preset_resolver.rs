@@ -615,7 +615,7 @@ mod tests {
     #[test]
     #[ignore]
     fn probe_real_vendor_filaments() {
-        let prof = PathBuf::from("C:/Program Files/OrcaSlicer/resources/profiles/BBL");
+        let prof = crate::slicer_integration::test_support::orca_profiles("BBL");
         if !prof.is_dir() {
             eprintln!("SKIP: BBL profiles not present");
             return;
@@ -668,7 +668,7 @@ mod tests {
     #[test]
     #[ignore]
     fn probe_real_machine_index_and_defaults() {
-        let resources = PathBuf::from("C:/Program Files/OrcaSlicer/resources");
+        let resources = crate::slicer_integration::test_support::orca_resources();
         if !resources.is_dir() {
             eprintln!("SKIP: Orca not present");
             return;
@@ -716,7 +716,7 @@ mod tests {
     fn probe_real_resolve_and_slice() {
         use super::super::project_assembly;
         use std::process::{Command, Stdio};
-        let prof = PathBuf::from("C:/Program Files/OrcaSlicer/resources/profiles/BBL");
+        let prof = crate::slicer_integration::test_support::orca_profiles("BBL");
         if !prof.is_dir() {
             eprintln!("SKIP: BBL profiles not present");
             return;
@@ -746,8 +746,8 @@ mod tests {
         assert!(flat.contains_key("filament_flow_ratio"), "must carry filament settings");
 
         // Assemble into pa_pattern and slice with the RESOLVED X1C config.
-        let orca = PathBuf::from("C:/Program Files/OrcaSlicer/orca-slicer.exe");
-        let template = PathBuf::from("C:/Program Files/OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf");
+        let orca = crate::slicer_integration::test_support::orca_exe();
+        let template = crate::slicer_integration::test_support::orca_calib("pressure_advance/pa_pattern.3mf");
         if !orca.is_file() || !template.is_file() {
             eprintln!("resolve OK; SKIP slice (orca/template missing)");
             return;

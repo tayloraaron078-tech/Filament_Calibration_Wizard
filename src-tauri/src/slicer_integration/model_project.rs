@@ -557,15 +557,16 @@ mod tests {
     #[ignore]
     fn probe_real_temp_tower_project() {
         use super::super::project_assembly::read_project_config;
+        use crate::slicer_integration::test_support;
         use std::process::{Command, Stdio};
-        let orca = Path::new("C:/Program Files/OrcaSlicer/orca-slicer.exe");
-        let stl = Path::new("C:/Program Files/OrcaSlicer/resources/calib/temperature_tower/temperature_tower.stl");
-        let donor = Path::new("C:/Program Files/OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf");
+        let orca = test_support::orca_exe();
+        let stl = test_support::orca_calib("temperature_tower/temperature_tower.stl");
+        let donor = test_support::orca_calib("pressure_advance/pa_pattern.3mf");
         if !orca.is_file() || !stl.is_file() || !donor.is_file() {
             eprintln!("SKIP: Orca / temp tower / donor not present");
             return;
         }
-        let master = parse_binary_stl(&std::fs::read(stl).unwrap()).unwrap();
+        let master = parse_binary_stl(&std::fs::read(&stl).unwrap()).unwrap();
         let (min0, max0) = master.bounds();
         println!(
             "master tower: {} tris, {} verts, height {:.1}mm",
@@ -609,7 +610,7 @@ mod tests {
         let outdir = d.join("out");
         std::fs::create_dir_all(&datadir).unwrap();
         std::fs::create_dir_all(&outdir).unwrap();
-        let status = Command::new(orca)
+        let status = Command::new(&orca)
             .arg("--datadir").arg(&datadir)
             .arg("--outputdir").arg(&outdir)
             .arg("--slice").arg("0")

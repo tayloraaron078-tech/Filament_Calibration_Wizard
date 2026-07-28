@@ -1126,22 +1126,25 @@ mod tests {
         std::fs::remove_dir_all(&d).ok();
     }
 
-    /// Stages the real 171 MB pinned Orca zip (downloaded once into the session
-    /// scratchpad) and asserts it checksums to the pin and detects as valid —
-    /// the download-on-demand pipeline minus the network fetch. Machine-specific
-    /// path, hence ignored (same pattern as the real-Orca slice probes).
-    /// Run: cargo test --lib engine::tests::probe_stage_real_orca_zip -- --ignored --nocapture
+    /// Stages the real 171 MB pinned Orca zip and asserts it checksums to the pin
+    /// and detects as valid — the download-on-demand pipeline minus the network
+    /// fetch. Point `PERFECTFIT_ORCA_ZIP` at a downloaded
+    /// `OrcaSlicer_Windows_V2.4.2_x64_portable.zip`; unset means skip (it never
+    /// hardcodes a session scratchpath — an earlier version did, and that file was
+    /// later deleted, silently turning the probe into a no-op).
+    /// Run: PERFECTFIT_ORCA_ZIP=…\orca.zip cargo test --lib engine::tests::probe_stage_real_orca_zip -- --ignored --nocapture
     #[cfg(target_os = "windows")]
     #[test]
     #[ignore]
     fn probe_stage_real_orca_zip() {
-        let zip = PathBuf::from(
-            r"C:\Users\prsda\AppData\Local\Temp\claude\C--Users-prsda-Documents-GitHub-Filament-Calibration-Wizard\ad8a8d15-cc41-4d81-9309-b417fe87a847\scratchpad\orca-2.4.2-x64.zip",
-        );
-        if !zip.is_file() {
-            eprintln!("scratchpad zip missing — skipping probe");
-            return;
-        }
+        let zip = match crate::slicer_integration::test_support::orca_pinned_zip() {
+            Some(z) => z,
+            None => {
+                eprintln!("PERFECTFIT_ORCA_ZIP not set — skipping probe");
+                return;
+            }
+        };
+        assert!(zip.is_file(), "PERFECTFIT_ORCA_ZIP does not point at a file: {}", zip.display());
         assert_eq!(
             sha256_file(&zip).unwrap(),
             "feba3009dfb9d268779cca5758a1a5bc3b7d0722bf8fa48d5c57340de975d6be"
