@@ -37,6 +37,74 @@ const PLUMBING_KEYS: &[&str] = &[
     "version",
 ];
 
+/// Fallback filament colour written when the resolved config carries none.
+/// Orca's own default for a freshly-added filament; any valid hex works — the
+/// value is cosmetic, it only has to exist (see `ensure_filament_colour`).
+const DEFAULT_FILAMENT_COLOUR: &str = "#00AE42";
+
+/// Orca's GUI project-load path builds per-object/per-extruder colour data from
+/// `filament_colour`. Our resolved config comes from Orca's SYSTEM filament
+/// presets, which carry no per-instance colour (that is assigned when a user
+/// adds the filament to a printer), so the key is absent — and loading a project
+/// whose filament has no colour makes Orca dereference a null while colouring
+/// the plate's objects, crashing the GUI on load (an ACCESS_VIOLATION inside
+/// OpenCASCADE `BRepExtrema_SelfIntersection`). Headless `--slice` never reads
+/// colour, so it slices fine regardless — which is why this only ever surfaced
+/// when opening an assembled project in the GUI. Guarantee a concrete colour per
+/// filament slot. See HQ CALIBRATION_TEST_FINDINGS.md §4.
+fn ensure_filament_colour(flat: &mut Map<String, Value>) {
+    let present = matches!(
+        flat.get("filament_colour"),
+        Some(Value::Array(a))
+            if !a.is_empty()
+                && a.iter().all(|c| c.as_str().is_some_and(|s| !s.trim().is_empty()))
+    );
+    if present {
+        return;
+    }
+    // Single-filament calibration -> mirror the filament slot count (filament_settings_id).
+    let slots = flat
+        .get("filament_settings_id")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len().max(1))
+        .unwrap_or(1);
+    flat.insert(
+        "filament_colour".into(),
+        Value::Array(vec![Value::String(DEFAULT_FILAMENT_COLOUR.to_string()); slots]),
+    );
+}
+
+/// Orca's GUI matches a project's filament to an installed system preset through
+/// the `filament_extruder_variant` legend (one entry per hardware hotend-variant
+/// slot) paired with `filament_self_index` (which maps each legend slot to a
+/// filament number). Our resolved config carries the variant legend (it lives in
+/// the system filament preset) but NOT the self-index — Orca generates that only
+/// when a filament is instantiated into a printer's slots. Without it the GUI
+/// rejects the whole project config ("invalid config file … can not find suitable
+/// filament_extruder_variant or filament_self_index") and loads an EMPTY bed;
+/// headless `--slice` ignores it entirely. A single-filament calibration means
+/// every legend slot maps to the one filament (index 1). See HQ
+/// CALIBRATION_TEST_FINDINGS.md §4.
+fn ensure_filament_self_index(flat: &mut Map<String, Value>) {
+    let present = matches!(
+        flat.get("filament_self_index"),
+        Some(Value::Array(a)) if !a.is_empty()
+    );
+    if present {
+        return;
+    }
+    // Only Bambu-lineage configs carry the variant legend; when it is absent the
+    // GUI does not require a self-index, so add nothing.
+    let variant_len = match flat.get("filament_extruder_variant") {
+        Some(Value::Array(a)) if !a.is_empty() => a.len(),
+        _ => return,
+    };
+    flat.insert(
+        "filament_self_index".into(),
+        Value::Array(vec![Value::String("1".into()); variant_len]),
+    );
+}
+
 /// Reject a preset/vendor name that could traverse out of its folder. Preset
 /// names legitimately contain spaces, `@`, `.`, and parentheses, so we only bar
 /// path separators, `..`, control characters, and empties.
@@ -236,6 +304,8 @@ fn combine(
         "filament_settings_id".into(),
         Value::Array(vec![Value::String(filament_name.to_string())]),
     );
+    ensure_filament_colour(&mut flat);
+    ensure_filament_self_index(&mut flat);
     (flat, printer_model)
 }
 
@@ -566,6 +636,66 @@ mod tests {
         assert_eq!(flat.get("filament_settings_id").unwrap(), &serde_json::json!(["PLA"]));
         assert_eq!(flat.get("layer_height").unwrap(), "0.2");
         assert_eq!(flat.get("filament_flow_ratio").unwrap(), &serde_json::json!(["1"]));
+    }
+
+    #[test]
+    fn combine_adds_default_filament_colour_when_absent() {
+        // System filament presets carry no per-instance colour; the combined
+        // config must still get one per slot, or Orca's GUI crashes on load.
+        let (flat, _) = combine(Map::new(), Map::new(), Map::new(), "M4", "P02", "PLA");
+        assert_eq!(
+            flat.get("filament_colour").unwrap(),
+            &serde_json::json!([DEFAULT_FILAMENT_COLOUR]),
+            "one colour per filament slot (single-filament calibration -> 1 slot)"
+        );
+    }
+
+    #[test]
+    fn combine_keeps_existing_filament_colour() {
+        // A resolved preset that already declares a real colour is left untouched.
+        let mut filament = Map::new();
+        filament.insert("filament_colour".into(), serde_json::json!(["#123456"]));
+        let (flat, _) = combine(Map::new(), Map::new(), filament, "M4", "P02", "PLA");
+        assert_eq!(flat.get("filament_colour").unwrap(), &serde_json::json!(["#123456"]));
+    }
+
+    #[test]
+    fn combine_replaces_blank_filament_colour() {
+        // An empty/blank colour is as fatal as a missing one — replace it.
+        let mut filament = Map::new();
+        filament.insert("filament_colour".into(), serde_json::json!([""]));
+        let (flat, _) = combine(Map::new(), Map::new(), filament, "M4", "P02", "PLA");
+        assert_eq!(flat.get("filament_colour").unwrap(), &serde_json::json!([DEFAULT_FILAMENT_COLOUR]));
+    }
+
+    #[test]
+    fn combine_adds_self_index_matching_the_variant_legend() {
+        // A single-filament calibration -> every extruder-variant slot maps to
+        // filament 1, so self_index is a run of "1"s the length of the legend.
+        let mut machine = Map::new();
+        machine.insert(
+            "filament_extruder_variant".into(),
+            serde_json::json!(["Direct Drive Standard", "Direct Drive High Flow"]),
+        );
+        let (flat, _) = combine(machine, Map::new(), Map::new(), "M4", "P02", "PLA");
+        assert_eq!(flat.get("filament_self_index").unwrap(), &serde_json::json!(["1", "1"]));
+    }
+
+    #[test]
+    fn combine_omits_self_index_without_a_variant_legend() {
+        // Non-Bambu configs carry no variant legend; the GUI doesn't need a
+        // self-index there, so none is invented.
+        let (flat, _) = combine(Map::new(), Map::new(), Map::new(), "M4", "P02", "PLA");
+        assert!(!flat.contains_key("filament_self_index"));
+    }
+
+    #[test]
+    fn combine_keeps_existing_self_index() {
+        let mut filament = Map::new();
+        filament.insert("filament_extruder_variant".into(), serde_json::json!(["A", "B"]));
+        filament.insert("filament_self_index".into(), serde_json::json!(["1", "2"]));
+        let (flat, _) = combine(Map::new(), Map::new(), filament, "M4", "P02", "PLA");
+        assert_eq!(flat.get("filament_self_index").unwrap(), &serde_json::json!(["1", "2"]));
     }
 
     #[test]

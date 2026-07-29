@@ -51,7 +51,7 @@ use std::io::Read;
 use std::path::Path;
 use zip::ZipArchive;
 
-use super::model_project::{xml_escape, SLICE_INFO_XML};
+use super::model_project::{plate_center_from_config, xml_escape, SLICE_INFO_XML};
 
 const CONFIG_CONTENT_TYPE_ENTRY: &str =
     " <Default Extension=\"config\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n</Types>";
@@ -113,6 +113,75 @@ fn parse_object_id_names(xml: &str) -> Vec<(u32, String)> {
         }
         rest = &after[end + 1..];
     }
+    out
+}
+
+/// The XY bounding-box centre of every `<vertex x= y=>` in a `3D/3dmodel.model`.
+/// The flow template bakes each object's position into its own vertices (its
+/// build items carry no transform), so this is the true centre of the whole
+/// object grid as it sits on the plate. Returns `None` if there are no vertices.
+fn model_xy_center(model_xml: &str) -> Option<(f64, f64)> {
+    let (mut minx, mut maxx) = (f64::INFINITY, f64::NEG_INFINITY);
+    let (mut miny, mut maxy) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut any = false;
+    let mut rest = model_xml;
+    while let Some(i) = rest.find("<vertex ") {
+        let after = &rest[i + "<vertex ".len()..];
+        let end = after.find('>').unwrap_or(after.len());
+        let tag = &after[..end];
+        if let (Some(xs), Some(ys)) = (extract_attr(tag, "x"), extract_attr(tag, "y")) {
+            if let (Ok(x), Ok(y)) = (xs.parse::<f64>(), ys.parse::<f64>()) {
+                any = true;
+                minx = minx.min(x);
+                maxx = maxx.max(x);
+                miny = miny.min(y);
+                maxy = maxy.max(y);
+            }
+        }
+        rest = &after[end..];
+    }
+    if any {
+        Some(((minx + maxx) / 2.0, (miny + maxy) / 2.0))
+    } else {
+        None
+    }
+}
+
+/// Add a `(dx, dy, 0)` translation to every build `<item>` so the object grid is
+/// centred on the plate. The template's items are identity (position baked into
+/// the mesh vertices, front-left of the bed); Orca's own flow calibration instead
+/// re-arranges the objects via real build-item transforms. We inject the same kind
+/// of transform. Items that already carry one are left untouched, and
+/// `<assemble_item>` is never matched (the marker is `"<item "`). A ~0 shift is a
+/// no-op passthrough.
+fn center_build_items(model_xml: &str, dx: f64, dy: f64) -> String {
+    if dx.abs() < 1e-6 && dy.abs() < 1e-6 {
+        return model_xml.to_string();
+    }
+    let inject = format!("transform=\"1 0 0 0 1 0 0 0 1 {dx} {dy} 0\" printable=\"1\"");
+    let mut out = String::with_capacity(model_xml.len() + 512);
+    let mut pos = 0usize;
+    while let Some(rel) = model_xml[pos..].find("<item ") {
+        let tag_start = pos + rel;
+        let Some(gt_rel) = model_xml[tag_start..].find('>') else { break };
+        let gt = tag_start + gt_rel;
+        let tag = &model_xml[tag_start..=gt]; // full "<item …>" incl the '>'
+        out.push_str(&model_xml[pos..tag_start]);
+        if tag.contains("transform=") {
+            out.push_str(tag);
+        } else {
+            let insert_at = tag.rfind("/>").unwrap_or_else(|| tag.rfind('>').unwrap());
+            let head = &tag[..insert_at];
+            out.push_str(head);
+            if !head.ends_with(' ') {
+                out.push(' ');
+            }
+            out.push_str(&inject);
+            out.push_str(&tag[insert_at..]);
+        }
+        pos = gt + 1;
+    }
+    out.push_str(&model_xml[pos..]);
     out
 }
 
@@ -253,12 +322,28 @@ pub fn assemble_flow_test(
     let content_types = read_zip_text_entry(&template, "[Content_Types].xml")?;
     let patched_content_types = ensure_config_content_type(&content_types);
 
+    // Centre the object grid on the plate. We reuse the template's own
+    // `3D/3dmodel.model`, whose build items are identity — so the grid stays where
+    // the meshes were authored (front-left of the bed). Orca's own flow
+    // calibration re-arranges the objects with real build-item transforms; we do
+    // the same, translating every item so the grid centre lands on the plate
+    // centre derived from the resolved config. (See HQ CALIBRATION_TEST_FINDINGS.md.)
+    let model_xml = read_zip_text_entry(&template, "3D/3dmodel.model")?;
+    let centered_model = match model_xy_center(&model_xml) {
+        Some((gx, gy)) => {
+            let (bx, by) = plate_center_from_config(&merged_config_json);
+            center_build_items(&model_xml, bx - gx, by - gy)
+        }
+        None => model_xml,
+    };
+
     let workspace = security::job_root(&session_id, &job_id)?.join("workspace");
     std::fs::create_dir_all(&workspace).map_err(|e| format!("Cannot create workspace: {e}"))?;
     let out_path = workspace.join(&output_file_name);
 
     let entries: Vec<(&str, &[u8])> = vec![
         ("[Content_Types].xml", patched_content_types.as_bytes()),
+        ("3D/3dmodel.model", centered_model.as_bytes()),
         ("Metadata/project_settings.config", merged_config_json.as_bytes()),
         ("Metadata/model_settings.config", model_settings.as_bytes()),
         ("Metadata/slice_info.config", SLICE_INFO_XML.as_bytes()),
@@ -328,6 +413,34 @@ mod tests {
         w.start_file("3D/3dmodel.model", opts).unwrap();
         w.write_all(SAMPLE_MODEL_XML.as_bytes()).unwrap();
         w.finish().unwrap();
+    }
+
+    #[test]
+    fn model_xy_center_is_the_vertex_bounding_box_center() {
+        let xml = r#"<mesh><vertices>
+          <vertex x="0" y="0" z="0"/><vertex x="10" y="20" z="1"/>
+        </vertices></mesh>"#;
+        assert_eq!(model_xy_center(xml), Some((5.0, 10.0)));
+        assert_eq!(model_xy_center("<build/>"), None);
+    }
+
+    #[test]
+    fn center_build_items_adds_a_translation_to_each_item() {
+        let xml = "<build>\n<item objectid=\"1\" p:UUID=\"a\"/>\n<item objectid=\"3\" p:UUID=\"b\"/>\n</build>";
+        let out = center_build_items(xml, 66.0, 81.0);
+        assert_eq!(out.matches("transform=\"1 0 0 0 1 0 0 0 1 66 81 0\"").count(), 2);
+        assert_eq!(out.matches("printable=\"1\"").count(), 2);
+        assert!(out.contains("objectid=\"1\"") && out.contains("objectid=\"3\""));
+        // objects are unchanged apart from the added attributes
+        assert!(out.contains("<item objectid=\"1\" p:UUID=\"a\" transform="));
+        // a ~zero shift is a no-op passthrough
+        assert_eq!(center_build_items(xml, 0.0, 0.0).as_str(), xml);
+    }
+
+    #[test]
+    fn center_build_items_leaves_an_existing_transform_alone() {
+        let xml = "<item objectid=\"1\" transform=\"1 0 0 0 1 0 0 0 1 5 5 0\"/>";
+        assert_eq!(center_build_items(xml, 66.0, 81.0).as_str(), xml);
     }
 
     #[test]
@@ -419,10 +532,15 @@ mod tests {
         z.by_name("Metadata/model_settings.config").unwrap().read_to_string(&mut ms).unwrap();
         assert!(ms.contains("object id=\"1\"") && ms.contains("object id=\"11\""));
         assert!(ms.contains("print_flow_ratio\" value=\"1.0\""));
-        // 3dmodel.model preserved verbatim (byte-identical geometry, untouched)
+        // Mesh geometry is preserved; only the build items gain a centring
+        // transform (the grid is moved from its authored origin onto the plate
+        // centre — (128,128) default here, since the test config has no printable_area).
         let mut model = String::new();
         z.by_name("3D/3dmodel.model").unwrap().read_to_string(&mut model).unwrap();
-        assert_eq!(model, SAMPLE_MODEL_XML);
+        assert!(model.contains("<object id=\"1\" name=\"flowrate_0\""));
+        assert!(model.contains("<vertex x=\"0\" y=\"0\" z=\"0\""));
+        assert_eq!(model.matches("transform=\"").count(), 2); // one per build item (2 objects)
+        assert!(model.contains("printable=\"1\""));
         std::fs::remove_dir_all(&d).ok();
         std::fs::remove_dir_all(&security::job_root("sess-flowtest", "job-flowtest").unwrap()).ok();
     }
