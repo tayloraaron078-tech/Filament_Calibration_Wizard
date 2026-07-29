@@ -94,13 +94,14 @@ export interface AssembleProjectArgs {
 }
 
 export interface AssembleTowerArgs {
-  engineId: EngineId;
   sessionId: string;
   jobId: string;
-  /** Source calibration STL (under the user's Orca install). */
-  stlPath: string;
-  /** Height to cut the master tower to (band-count × band height, mm). */
-  towerHeightMm: number;
+  /** Hottest band temperature (°C) — the bottom of the cut window. */
+  startTemp: number;
+  /** Coolest band temperature (°C) — the top of the cut window. */
+  endTemp: number;
+  /** Nozzle diameter (mm); the master tower is scaled by nozzle/0.4. */
+  nozzleMm: number;
   /** The merged project_settings.config text to embed. */
   mergedConfigJson: string;
   /** Generated per-band custom_gcode_per_layer.xml (empty string to omit). */
@@ -299,11 +300,11 @@ export const nativeEngineBridge: EngineNativeBridge = {
   },
   assembleTemperatureTower(args) {
     return invoke<RawAssembledProject>('assemble_temperature_tower', {
-      engineId: args.engineId,
       sessionId: args.sessionId,
       jobId: args.jobId,
-      stlPath: args.stlPath,
-      towerHeightMm: args.towerHeightMm,
+      startTemp: args.startTemp,
+      endTemp: args.endTemp,
+      nozzleMm: args.nozzleMm,
       mergedConfigJson: args.mergedConfigJson,
       customGcodeXml: args.customGcodeXml,
       outputFileName: args.outputFileName

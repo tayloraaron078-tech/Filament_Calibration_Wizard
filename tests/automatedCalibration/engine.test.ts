@@ -553,6 +553,7 @@ const RESOLVED_FOR_TOWER = {
   settings: {
     printer_settings_id: 'Bambu Lab X1 Carbon 0.4 nozzle',
     layer_height: '0.2',
+    nozzle_diameter: ['0.4'],
     nozzle_temperature: ['200', '200'],
     nozzle_temperature_initial_layer: ['200', '200']
   } as Record<string, unknown>,
@@ -563,7 +564,7 @@ const RESOLVED_FOR_TOWER = {
 };
 
 describe('InstalledOrcaEngine.prepareProject (temperature tower)', () => {
-  it('cuts to the material band count, sets start temp, and injects per-band M104', async () => {
+  it('passes the temp window + nozzle, sets start temp, and injects per-band M104', async () => {
     let captured: AssembleTowerArgs | null = null;
     const engine = new InstalledOrcaEngine(
       fakeBridge({
@@ -580,9 +581,11 @@ describe('InstalledOrcaEngine.prepareProject (temperature tower)', () => {
     expect(prepared.stepId).toBe('temperature');
     expect(prepared.projectFilePath).toContain('project.3mf');
     expect(captured).not.toBeNull();
-    // PLA towerRange 230->190 step 5 => 9 bands => 90mm
-    expect(captured!.towerHeightMm).toBe(90);
-    expect(captured!.stlPath).toContain('temperature_tower.stl');
+    // PLA towerRange 230->190 => the native side cuts that window of the bundled
+    // master; the engine passes the endpoints + nozzle (0.4 default -> scale 1).
+    expect(captured!.startTemp).toBe(230);
+    expect(captured!.endTemp).toBe(190);
+    expect(captured!.nozzleMm).toBe(0.4);
     // per-band changes injected: 225 at the first boundary, 190 at the top
     expect(captured!.customGcodeXml).toContain('M104 S225');
     expect(captured!.customGcodeXml).toContain('M104 S190');

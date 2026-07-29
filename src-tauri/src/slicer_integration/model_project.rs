@@ -17,7 +17,7 @@
 //! Reads only the caller-provided model bytes; writes only the output project.
 
 use super::project_assembly::RawAssembledProject;
-use super::{engine, security};
+use super::security;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -95,13 +95,40 @@ pub fn parse_binary_stl(bytes: &[u8]) -> Result<Mesh, String> {
     Ok(Mesh { vertices, triangles })
 }
 
-/// Trim a mesh to everything at or below `zcut` (in the mesh's own coordinates),
-/// clipping triangles that straddle the plane so the walls stay closed at every
-/// layer. No top cap is added — each horizontal slice is still a closed loop from
-/// the walls, which is what the slicer needs. Used to size Orca's tall master
-/// temperature-tower STL down to `towerHeightMm(range)` (band-count × 10 mm),
-/// matching how Orca itself cuts it.
-pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
+/// The temperature-tower master, bundled from OrcaSlicer's own
+/// `temperature_tower.drc` (decoded once at dev time; AGPL-3.0 — see
+/// THIRD-PARTY-NOTICES.md). It is a 700 mm tower labelled 500 °C at Z=0 and
+/// descending 5 °C per 10 mm block — the exact model Orca's own Temperature
+/// calibration cuts a window from. Stored zipped (~1.5 MB) and unpacked with the
+/// crate's existing `zip` dependency. Using the real master (rather than the
+/// stale `temperature_tower.stl`, a different/shorter model) is what makes the
+/// cut window's embossed labels match the injected temperatures.
+const MASTER_TOWER_ZIP: &[u8] = include_bytes!("../../resources/temperature_tower_master.zip");
+
+/// Decode the bundled temperature-tower master into a mesh.
+pub fn load_master_tower() -> Result<Mesh, String> {
+    use std::io::Read;
+    let cursor = std::io::Cursor::new(MASTER_TOWER_ZIP);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("master tower archive: {e}"))?;
+    let mut entry = archive
+        .by_index(0)
+        .map_err(|e| format!("master tower entry: {e}"))?;
+    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    entry
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("read master tower: {e}"))?;
+    parse_binary_stl(&bytes)
+}
+
+/// Trim a mesh to one side of the horizontal plane `z = zcut` (in the mesh's own
+/// coordinates), clipping triangles that straddle the plane so the walls stay
+/// closed at every layer. `keep_above` selects which side is retained. No cap is
+/// added on the cut face — each horizontal slice is still a closed loop from the
+/// walls, which is what the slicer needs. Degenerate (zero-area) faces produced
+/// by vertex-welding at the plane are dropped, since a face with an undefined
+/// normal crashes OrcaSlicer's GUI mesh analysis (OpenCASCADE self-intersection →
+/// ACCESS_VIOLATION) on load even though the headless `--slice` path tolerates it.
+pub fn cut_plane(mesh: &Mesh, zcut: f64, keep_above: bool) -> Mesh {
     let mut vertices: Vec<[f64; 3]> = Vec::new();
     let mut index: HashMap<(i64, i64, i64), usize> = HashMap::new();
     let q = |f: f64| (f * 100_000.0).round() as i64;
@@ -112,6 +139,14 @@ pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
             vertices.len() - 1
         })
     };
+    // Whether a vertex is on the retained side of the plane.
+    let kept_side = |z: f64| -> bool {
+        if keep_above {
+            z >= zcut
+        } else {
+            z <= zcut
+        }
+    };
     // Intersection of edge P→Q with the plane z = zcut.
     let cross = |p: [f64; 3], qy: [f64; 3]| -> [f64; 3] {
         let t = (zcut - p[2]) / (qy[2] - p[2]);
@@ -121,9 +156,9 @@ pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
     let mut triangles: Vec<[usize; 3]> = Vec::new();
     for tri in &mesh.triangles {
         let v = [mesh.vertices[tri[0]], mesh.vertices[tri[1]], mesh.vertices[tri[2]]];
-        let below = [v[0][2] <= zcut, v[1][2] <= zcut, v[2][2] <= zcut];
-        let nb = below.iter().filter(|&&b| b).count();
-        match nb {
+        let keep = [kept_side(v[0][2]), kept_side(v[1][2]), kept_side(v[2][2])];
+        let nk = keep.iter().filter(|&&b| b).count();
+        match nk {
             3 => {
                 let a = push(v[0], &mut vertices, &mut index);
                 let b = push(v[1], &mut vertices, &mut index);
@@ -134,11 +169,10 @@ pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
             _ => {
                 // Rotate so the winding is preserved while handling the two cases
                 // by the index of the "odd one out".
-                let (i0, i1, i2) = (0usize, 1usize, 2usize);
-                let order = [i0, i1, i2];
-                if nb == 1 {
-                    // one below (A), two above (B,C): keep triangle A, P_ab, P_ac
-                    let a_pos = order.iter().position(|&k| below[k]).unwrap();
+                let order = [0usize, 1usize, 2usize];
+                if nk == 1 {
+                    // one kept (A), two removed (B,C): keep triangle A, P_ab, P_ac
+                    let a_pos = order.iter().position(|&k| keep[k]).unwrap();
                     let a = v[order[a_pos]];
                     let b = v[order[(a_pos + 1) % 3]];
                     let c = v[order[(a_pos + 2) % 3]];
@@ -147,8 +181,8 @@ pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
                     let iac = push(cross(a, c), &mut vertices, &mut index);
                     triangles.push([ia, iab, iac]);
                 } else {
-                    // two below (A,B), one above (C): keep quad A,B,P_bc,P_ac
-                    let c_pos = order.iter().position(|&k| !below[k]).unwrap();
+                    // two kept (A,B), one removed (C): keep quad A,B,P_bc,P_ac
+                    let c_pos = order.iter().position(|&k| !keep[k]).unwrap();
                     let c = v[order[c_pos]];
                     let a = v[order[(c_pos + 1) % 3]];
                     let b = v[order[(c_pos + 2) % 3]];
@@ -162,7 +196,86 @@ pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
             }
         }
     }
+    triangles.retain(|t| {
+        if t[0] == t[1] || t[1] == t[2] || t[0] == t[2] {
+            return false;
+        }
+        let (a, b, c) = (vertices[t[0]], vertices[t[1]], vertices[t[2]]);
+        let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            ab[1] * ac[2] - ab[2] * ac[1],
+            ab[2] * ac[0] - ab[0] * ac[2],
+            ab[0] * ac[1] - ab[1] * ac[0],
+        ];
+        n[0] * n[0] + n[1] * n[1] + n[2] * n[2] > 1e-12
+    });
     Mesh { vertices, triangles }
+}
+
+/// Trim a mesh to everything at or below `zcut`. Thin wrapper over `cut_plane`.
+pub fn cut_below_z(mesh: &Mesh, zcut: f64) -> Mesh {
+    cut_plane(mesh, zcut, false)
+}
+
+/// Uniformly scale a mesh about the origin (Orca scales the whole calibration
+/// object by `nozzle / 0.4`).
+pub fn scale_mesh(mesh: &Mesh, s: f64) -> Mesh {
+    Mesh {
+        vertices: mesh.vertices.iter().map(|v| [v[0] * s, v[1] * s, v[2] * s]).collect(),
+        triangles: mesh.triangles.clone(),
+    }
+}
+
+/// The reference constants Orca's `Plater::calib_temp` uses to map a temperature
+/// range onto a window of the master tower: 500 °C at the base, 5 °C per block,
+/// 10 mm per block (at the base 0.4 mm nozzle).
+const TOWER_REF_TEMP: i32 = 500;
+const TOWER_TEMP_STEP: i32 = 5;
+const TOWER_BLOCK_MM: f64 = 10.0;
+const TOWER_BASE_NOZZLE: f64 = 0.4;
+
+/// Cut the temperature-tower master to the [start, end] window, replicating
+/// `Plater::calib_temp`: keep the Z window whose embossed labels run from `start`
+/// (hottest, bottom) to `end` (coolest, top), then scale by `nozzle / 0.4`.
+/// Because the labels are baked into the master at `500 − Z/2` °C, cutting this
+/// exact window is what makes them match the injected M104 schedule.
+pub fn cut_temperature_window(
+    master: &Mesh,
+    start_temp: i32,
+    end_temp: i32,
+    nozzle_mm: f64,
+) -> Result<Mesh, String> {
+    if start_temp <= end_temp {
+        return Err("start_temp must be greater than end_temp".into());
+    }
+    // Orca: cut upper keeps below ((500-end)/step + 1) blocks; cut bottom keeps
+    // above ((500-start)/step) blocks. Match Orca's `lround` (nearest), not i32
+    // truncation, so a non-multiple-of-5 endpoint lands on the same block.
+    let step = TOWER_TEMP_STEP as f64;
+    let z_lo = (((TOWER_REF_TEMP - start_temp) as f64) / step).round() * TOWER_BLOCK_MM;
+    let z_hi = ((((TOWER_REF_TEMP - end_temp) as f64) / step).round() + 1.0) * TOWER_BLOCK_MM;
+    let (mmin, mmax) = master.bounds();
+    if z_lo < mmin[2] - 1e-6 || z_hi > mmax[2] + 1e-6 {
+        let master_hot = TOWER_REF_TEMP - (mmin[2] / TOWER_BLOCK_MM * TOWER_TEMP_STEP as f64).round() as i32;
+        let master_cold = TOWER_REF_TEMP - (mmax[2] / TOWER_BLOCK_MM * TOWER_TEMP_STEP as f64).round() as i32;
+        return Err(format!(
+            "Temperature range {end_temp}–{start_temp} °C is outside the master tower ({master_cold}–{master_hot} °C)"
+        ));
+    }
+    // Keep the window [z_lo, z_hi] (coordinates preserved; the assembler rests
+    // min-Z on the bed).
+    let below = cut_plane(master, z_hi, false);
+    let window = cut_plane(&below, z_lo, true);
+    if window.triangles.is_empty() {
+        return Err("Temperature window cut produced an empty mesh".into());
+    }
+    let scale = nozzle_mm / TOWER_BASE_NOZZLE;
+    Ok(if (scale - 1.0).abs() > 1e-9 {
+        scale_mesh(&window, scale)
+    } else {
+        window
+    })
 }
 
 /// Format an f64 compactly for 3mf XML (trim trailing zeros, avoid `-0`).
@@ -350,19 +463,20 @@ pub fn assemble_model_project(
     Ok(entries.len())
 }
 
-/// Assemble a temperature-tower project into the job workspace: read the shipped
-/// `temperature_tower.stl` from the vetted install, cut it to `tower_height_mm`
-/// (as Orca does — band-count × 10 mm), and package it with the merged config and
-/// the generated per-band `custom_gcode_per_layer.xml`. Output lands at
-/// `sessions/<session>/jobs/<job>/workspace/<output_file_name>`.
+/// Assemble a temperature-tower project into the job workspace: take PerfectFit's
+/// bundled master tower (decoded from Orca's own `temperature_tower.drc`), cut the
+/// [start, end] window Orca's own calibration cuts (so the embossed labels match
+/// the temperatures), scale it by `nozzle_mm / 0.4`, and package it with the
+/// merged config and the generated per-band `custom_gcode_per_layer.xml`. Output
+/// lands at `sessions/<session>/jobs/<job>/workspace/<output_file_name>`.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_temperature_tower(
-    engine_id: String,
     session_id: String,
     job_id: String,
-    stl_path: String,
-    tower_height_mm: f64,
+    start_temp: i32,
+    end_temp: i32,
+    nozzle_mm: f64,
     merged_config_json: String,
     custom_gcode_xml: String,
     output_file_name: String,
@@ -371,28 +485,12 @@ pub fn assemble_temperature_tower(
     if !output_file_name.to_ascii_lowercase().ends_with(".3mf") {
         return Err("Output file must be a .3mf".into());
     }
-    if !(tower_height_mm.is_finite() && tower_height_mm > 0.0) {
-        return Err("tower_height_mm must be a positive number".into());
-    }
-    let stl = std::fs::canonicalize(&stl_path).map_err(|e| format!("Cannot resolve STL {stl_path}: {e}"))?;
-
-    // Confine the model to the vetted engine's own resources when resolvable — a
-    // calibration model must come from the user's own install, never an arbitrary
-    // frontend path (same rule as project_assembly).
-    let mut warnings = Vec::new();
-    if engine_id == "installed_orca" {
-        match engine::engine_resources_root(&engine_id) {
-            Some(root) => security::ensure_under(&root, &stl)?,
-            None => warnings.push("Engine resources root unknown; STL not confined to the install.".into()),
-        }
+    if !(nozzle_mm.is_finite() && nozzle_mm > 0.0) {
+        return Err("nozzle_mm must be a positive number".into());
     }
 
-    let master = parse_binary_stl(&std::fs::read(&stl).map_err(|e| format!("Cannot read STL: {e}"))?)?;
-    let (min, _max) = master.bounds();
-    let mesh = cut_below_z(&master, min[2] + tower_height_mm);
-    if mesh.triangles.is_empty() {
-        return Err("Cut produced an empty mesh — tower_height_mm too small?".into());
-    }
+    let master = load_master_tower()?;
+    let mesh = cut_temperature_window(&master, start_temp, end_temp, nozzle_mm)?;
 
     let workspace = security::job_root(&session_id, &job_id)?.join("workspace");
     std::fs::create_dir_all(&workspace).map_err(|e| format!("Cannot create workspace: {e}"))?;
@@ -410,7 +508,7 @@ pub fn assemble_temperature_tower(
         workspace_dir: workspace.display().to_string(),
         config_replaced: true,
         entry_count,
-        warnings,
+        warnings: Vec::new(),
     })
 }
 
@@ -510,6 +608,45 @@ mod tests {
     }
 
     #[test]
+    fn bundled_master_tower_decodes_to_orca_geometry() {
+        // The bundled master (decoded from Orca's temperature_tower.drc) is a
+        // 700mm tower labelled 500 C at Z=0, descending 5 C / 10 mm.
+        let master = load_master_tower().unwrap();
+        let (mmin, mmax) = master.bounds();
+        assert!(
+            (mmax[2] - mmin[2] - 700.0).abs() < 1.0,
+            "master should be ~700mm tall, got {}",
+            mmax[2] - mmin[2]
+        );
+        assert!(mmin[2].abs() < 1e-3, "master base at Z=0");
+    }
+
+    #[test]
+    fn cut_temperature_window_matches_orca_cut() {
+        let master = load_master_tower().unwrap();
+        // PLA 230->190 => 9 blocks => 90mm window (0.4 nozzle, scale 1).
+        let win = cut_temperature_window(&master, 230, 190, 0.4).unwrap();
+        let (wmin, wmax) = win.bounds();
+        assert!(
+            (wmax[2] - wmin[2] - 90.0).abs() < 0.5,
+            "230->190 window should be ~90mm, got {}",
+            wmax[2] - wmin[2]
+        );
+        assert!(!win.triangles.is_empty());
+        // A 0.6 nozzle scales the whole tower by 1.5 => 135mm.
+        let win6 = cut_temperature_window(&master, 230, 190, 0.6).unwrap();
+        let (w6min, w6max) = win6.bounds();
+        assert!(
+            (w6max[2] - w6min[2] - 135.0).abs() < 1.0,
+            "0.6 nozzle window should be ~135mm, got {}",
+            w6max[2] - w6min[2]
+        );
+        // Guards: inverted range and a range above the master both error.
+        assert!(cut_temperature_window(&master, 190, 230, 0.4).is_err());
+        assert!(cut_temperature_window(&master, 600, 550, 0.4).is_err());
+    }
+
+    #[test]
     fn plate_center_parses_printable_area() {
         let cfg = r#"{"printable_area":["0x0","256x0","256x256","0x256"]}"#;
         assert_eq!(plate_center_from_config(cfg), (128.0, 128.0));
@@ -547,11 +684,14 @@ mod tests {
         std::fs::remove_dir_all(&d).ok();
     }
 
-    /// Supervised real-Orca proof: wrap the shipped temperature_tower.stl into a
-    /// from-scratch project (donor config stands in for a resolved one) with a
-    /// generated temperature custom-gcode, and headless-slice it. Proves the
-    /// synthesized plate/model scaffolding is accepted (exit 0 + g-code) and the
-    /// M104 injections land. Run with
+    /// Supervised real-Orca proof of the production temperature-tower path: cut
+    /// the [start, end] window from PerfectFit's BUNDLED master (decoded from
+    /// Orca's own `temperature_tower.drc`, the same window Orca cuts), wrap it in
+    /// a from-scratch project (donor config stands in for a resolved one) with the
+    /// generated M104 custom-gcode, and headless-slice it. Proves the cut window
+    /// slices (exit 0 + g-code) and the injections land. The embossed labels
+    /// matching the temps is verified by opening the emitted project in the GUI
+    /// (set PF_EMIT_PROJECT). Run with
     /// `cargo test -- --ignored probe_real_temp_tower_project`.
     #[test]
     #[ignore]
@@ -560,29 +700,27 @@ mod tests {
         use crate::slicer_integration::test_support;
         use std::process::{Command, Stdio};
         let orca = test_support::orca_exe();
-        let stl = test_support::orca_calib("temperature_tower/temperature_tower.stl");
         let donor = test_support::orca_calib("pressure_advance/pa_pattern.3mf");
-        if !orca.is_file() || !stl.is_file() || !donor.is_file() {
-            eprintln!("SKIP: Orca / temp tower / donor not present");
+        if !orca.is_file() || !donor.is_file() {
+            eprintln!("SKIP: Orca / donor not present");
             return;
         }
-        let master = parse_binary_stl(&std::fs::read(&stl).unwrap()).unwrap();
+        let master = load_master_tower().unwrap();
         let (min0, max0) = master.bounds();
         println!(
-            "master tower: {} tris, {} verts, height {:.1}mm",
+            "bundled master tower: {} tris, {} verts, height {:.1}mm",
             master.triangles.len(),
             master.vertices.len(),
             max0[2] - min0[2]
         );
 
-        // Cut the 370mm master to a 9-band, 90mm tower (230->190 step 5), as Orca
-        // does. Cut plane is 90mm above the model's own min-z.
+        // Cut the PLA window (230->190, 0.4 nozzle) exactly as Orca's calibration
+        // does — the labels on this window run 230 (bottom) to 190 (top).
         let band_height = 10.0;
         let bands = 9; // 230,225,...,190
-        let zcut = min0[2] + band_height * bands as f64;
-        let mesh = cut_below_z(&master, zcut);
+        let mesh = cut_temperature_window(&master, 230, 190, 0.4).unwrap();
         let (_minc, maxc) = mesh.bounds();
-        println!("cut tower: {} tris, {} verts, height {:.1}mm", mesh.triangles.len(), mesh.vertices.len(), maxc[2] - _minc[2]);
+        println!("cut window: {} tris, {} verts, height {:.1}mm", mesh.triangles.len(), mesh.vertices.len(), maxc[2] - _minc[2]);
 
         let cfg = read_project_config(donor.display().to_string()).unwrap();
 
@@ -605,6 +743,14 @@ mod tests {
         let d = temp_dir("temptower");
         let project = d.join("project.3mf");
         assemble_model_project(&project, &mesh, "TemperatureTower", &cfg, Some(&xml)).unwrap();
+
+        // Optional: emit the assembled project to a stable path for manual GUI
+        // inspection (does OrcaSlicer's *GUI* open it without crashing?). The
+        // headless slice below only exercises the CLI path, which is more lenient.
+        if let Ok(dst) = std::env::var("PF_EMIT_PROJECT") {
+            std::fs::copy(&project, &dst).unwrap();
+            println!("EMITTED PROJECT: {dst}");
+        }
 
         let datadir = d.join("datadir");
         let outdir = d.join("out");

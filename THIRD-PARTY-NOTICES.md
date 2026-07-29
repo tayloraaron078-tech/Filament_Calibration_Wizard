@@ -46,6 +46,28 @@ any OrcaSlicer you may have installed yourself.
 the user that it installs OrcaSlicer, a separate open-source program (AGPL-3.0),
 which PerfectFit drives automatically to slice calibration tests.
 
+## OrcaSlicer temperature-tower model (bundled asset)
+
+Unlike the slicer engine above, PerfectFit **does bundle one OrcaSlicer asset**:
+the temperature-tower calibration model. The automated temperature calibration
+must cut the exact tower window Orca's own calibration cuts (so the model's
+embossed temperature labels match the printed temperatures), which requires
+Orca's master model. It is shipped as
+[`src-tauri/resources/temperature_tower_master.zip`](src-tauri/resources/temperature_tower_master.zip),
+decoded from OrcaSlicer's `resources/calib/temperature_tower/temperature_tower.drc`
+(a Draco-compressed mesh) into an uncompressed mesh at build-preparation time.
+
+| | |
+|---|---|
+| **Asset** | `temperature_tower.drc` (temperature-tower calibration model) |
+| **Source project** | OrcaSlicer — https://github.com/OrcaSlicer/OrcaSlicer |
+| **License** | GNU Affero General Public License v3.0 (**AGPL-3.0**) — the same license as PerfectFit |
+| **Corresponding source** | https://github.com/OrcaSlicer/OrcaSlicer (see `resources/calib/temperature_tower/`) |
+
+Redistributing this asset is permitted because PerfectFit is itself AGPL-3.0; the
+model is used and shipped under the same license, with attribution here. Only the
+geometry is reused — the temperature schedule and cut are PerfectFit's own code.
+
 ## Notes
 
 - OrcaSlicer itself incorporates other open-source components (e.g. it is a fork

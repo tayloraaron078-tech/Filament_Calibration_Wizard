@@ -49,9 +49,8 @@ import {
   type OrcaFilamentPreset
 } from '../filamentSelection';
 import {
-  defaultTowerGeometry,
   generateTemperatureTowerGcode,
-  towerHeightMm
+  ORCA_BAND_HEIGHT_MM
 } from '../temperatureTower';
 import {
   buildFlowObjectOverrides,
@@ -363,7 +362,7 @@ export class InstalledOrcaEngine implements SlicingEngine {
     const jobId = workspaceDirName(session.id, step.id, fingerprint);
 
     if (step.id === 'temperature' && asset.assetType === 'stl') {
-      return this.prepareTemperatureTower(session, step, resolved.location, resolvedPreset, jobId);
+      return this.prepareTemperatureTower(session, step, resolvedPreset, jobId);
     }
     if (asset.assetType === '3mf' && step.id in FLOW_STEP_METHOD) {
       return this.prepareFlowTest(session, step, resolved.location, resolvedPreset, jobId);
@@ -395,14 +394,14 @@ export class InstalledOrcaEngine implements SlicingEngine {
   /**
    * Prepare a temperature-tower project: the material's `towerRange` sets the
    * band temperatures, the resolved printer config is the base (with its start
-   * temperature set so the first band is correct), the master STL is cut to the
-   * band count natively, and the per-band `M104` changes are injected as custom
-   * g-code. A resolved printer preset is REQUIRED — the STL carries no config.
+   * temperature set so the first band is correct), and PerfectFit's bundled
+   * master tower (Orca's own model) is cut natively to the exact [start, end]
+   * window Orca cuts — so the embossed labels match the injected `M104` changes.
+   * A resolved printer preset is REQUIRED (it supplies the nozzle + config).
    */
   private async prepareTemperatureTower(
     session: AutomatedCalibrationSession,
     step: CalibrationStepDefinition,
-    stlPath: string,
     resolvedPreset: ResolvedPrinterPreset | undefined,
     jobId: string
   ): Promise<PreparedCalibrationProject> {
@@ -413,11 +412,18 @@ export class InstalledOrcaEngine implements SlicingEngine {
       );
     }
     const tower = getMaterial(session.filament.material).towerRange;
-    const range = { startTemp: tower.start, endTemp: tower.end, step: tower.step };
+    const range = { startTemp: Math.round(tower.start), endTemp: Math.round(tower.end), step: tower.step };
+    // Orca scales the whole tower (and thus each block's height) by nozzle/0.4,
+    // so the M104 band boundaries must scale to match the cut mesh.
+    const nozzle = firstNumber(resolvedPreset.settings.nozzle_diameter) ?? 0.4;
+    const bandScale = nozzle / 0.4;
     const layerHeight = firstNumber(resolvedPreset.settings.layer_height) ?? 0.2;
-    const geometry = defaultTowerGeometry(layerHeight);
+    const geometry = {
+      bandHeightMm: ORCA_BAND_HEIGHT_MM * bandScale,
+      baseHeightMm: ORCA_BAND_HEIGHT_MM * bandScale,
+      layerHeightMm: layerHeight
+    };
     const { xml } = generateTemperatureTowerGcode(range, geometry);
-    const height = towerHeightMm(range, geometry);
 
     // Base config = resolved printer + calibrated values, with the start
     // temperature set so band 1 (which has no injected change) prints hot.
@@ -426,11 +432,11 @@ export class InstalledOrcaEngine implements SlicingEngine {
     setStartTemperature(config, range.startTemp);
 
     const assembled = await this.bridge.assembleTemperatureTower({
-      engineId: this.id,
       sessionId: session.id,
       jobId,
-      stlPath,
-      towerHeightMm: height,
+      startTemp: range.startTemp,
+      endTemp: range.endTemp,
+      nozzleMm: nozzle,
       mergedConfigJson: serializeProjectConfig(config),
       customGcodeXml: xml,
       outputFileName: 'project.3mf'
