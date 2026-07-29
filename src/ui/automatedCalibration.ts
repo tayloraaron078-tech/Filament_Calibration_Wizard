@@ -44,7 +44,6 @@ import {
   loadSessionSafe,
   cancelSession,
   completeSession,
-  stepReadiness,
   orderWorkflow,
   getStepDefinition,
   type EngineId,
@@ -290,16 +289,33 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
   if (!sliceableSteps.length) {
     stepsCard.append(h('p', { class: 'field-help' }, 'No steps in this project’s workflow support automated slicing yet.'));
   }
+  // Gating model (owner decision 2026-07-29): the temperature tower must be run
+  // first; once it's recorded as done, EVERY other test unlocks and can be run in
+  // any order. The 3D-printing community genuinely disagrees on the "right" order
+  // for the rest, so PerfectFit doesn't force one — it only insists on temperature
+  // first (every other test's result is judged at, or depends on, a good melt).
+  //
+  // This replaces an earlier value-based readiness gate (`stepReadiness` on the
+  // working profile) that kept downstream steps locked forever: the manual
+  // result-recording path writes `project.finals` + marks the step completed, but
+  // never populated `workingProfile.values`, so the old gate never saw the temp
+  // result and never unlocked. Slicing a later test bakes earlier calibrated
+  // values in from `project.finals`, gated on step COMPLETION (see
+  // `buildPatchesFromProject`), so completion — not working-profile values — is
+  // the correct and only gate we need here.
+  const tempDone = p.steps['temperature']?.status === 'completed';
   for (const sid of sliceableSteps) {
     const def = getCalibration(sid);
     const stepDef = getStepDefinition(sid);
-    const readiness = stepReadiness(workingProfile, sid);
     const st = p.steps[sid];
     const done = st?.status === 'completed';
+    // Temperature is always available (it's the required first step); every other
+    // test unlocks once temperature is done.
+    const unlocked = sid === 'temperature' || tempDone;
     const resultBox = h('div', {});
     const runBtn = h('button', {
       class: 'btn btn-sm btn-primary',
-      disabled: !canSlice || !readiness.ready,
+      disabled: !canSlice || !unlocked,
       onClick: async () => {
         if (!selection && !manualPreset) return;
         (runBtn as HTMLButtonElement).disabled = true;
@@ -314,10 +330,10 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
       h('div', { style: 'flex:1' },
         h('h4', {}, def.name, ' ',
           done ? h('span', { class: 'badge badge-ok' }, '✓ done') :
-          readiness.ready ? h('span', { class: 'badge badge-accent' }, 'ready to prepare') :
-          h('span', { class: 'badge badge-info' }, 'needs earlier steps first')),
-        !readiness.ready && !done
-          ? h('p', { class: 'field-help' }, `Waiting on: ${readiness.missingInputs.join(', ')}`)
+          unlocked ? h('span', { class: 'badge badge-accent' }, 'ready to prepare') :
+          h('span', { class: 'badge badge-info' }, 'do the temp tower first')),
+        !unlocked && !done
+          ? h('p', { class: 'field-help' }, 'Run and record the temperature tower first — it unlocks every other test, which you can then do in any order.')
           : null,
         resultBox
       ),
