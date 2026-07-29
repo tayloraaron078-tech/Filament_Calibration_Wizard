@@ -159,12 +159,19 @@ fn ensure_config_content_type(content_types_xml: &str) -> String {
 }
 
 /// Build the multi-object `Metadata/model_settings.config`: one `<object>` block
-/// per plate object carrying its per-object overrides, one `<model_instance>`
-/// per object under a single plate 1, and one `<assemble_item>` per object.
-/// Objects keep the IDENTITY transform (the template's own `<item>` elements
-/// carry no transform — position is baked into each object's mesh already).
+/// per plate object carrying its per-object overrides, and one `<model_instance>`
+/// per object under a single plate 1. Each object's position is already baked
+/// into its mesh vertices (the template's `<item>` elements carry no transform).
+///
+/// NB: no `<assemble>` section is emitted. Orca's own multi-object projects carry
+/// one, but writing all objects with an identity transform at offset 0,0,0 (the
+/// only position info we have — the real one is in the vertices) stacks every
+/// object at the origin for Orca's *assembly* feature, and building that assembly
+/// runs an OpenCASCADE self-intersection check over 9 fully-overlapping bodies
+/// that crashes the GUI on load (ACCESS_VIOLATION in `BRepExtrema_SelfIntersection`).
+/// The section is an assembly-view convenience, not needed to slice or print, so
+/// it is omitted — the headless slice and the GUI both load the plate correctly.
 fn model_settings_xml_multi(objects: &[FlowObjectInput]) -> String {
-    const IDENTITY_TRANSFORM: &str = "1 0 0 0 1 0 0 0 1 0 0 0";
     let mut s = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n");
     for obj in objects {
         let esc_name = xml_escape(&obj.name);
@@ -196,14 +203,7 @@ fn model_settings_xml_multi(objects: &[FlowObjectInput]) -> String {
             obj.id, obj.id
         ));
     }
-    s.push_str("  </plate>\n  <assemble>\n");
-    for obj in objects {
-        s.push_str(&format!(
-            "   <assemble_item object_id=\"{}\" instance_id=\"0\" transform=\"{IDENTITY_TRANSFORM}\" offset=\"0 0 0\" />\n",
-            obj.id
-        ));
-    }
-    s.push_str("  </assemble>\n</config>\n");
+    s.push_str("  </plate>\n</config>\n");
     s
 }
 
@@ -373,7 +373,9 @@ mod tests {
         let xml = model_settings_xml_multi(&objects);
         assert_eq!(xml.matches("<object id=").count(), 2);
         assert_eq!(xml.matches("<model_instance>").count(), 2);
-        assert_eq!(xml.matches("<assemble_item ").count(), 2);
+        // No <assemble> section — it stacks objects at the origin and crashes
+        // Orca's GUI assembly self-intersection check (see model_settings_xml_multi).
+        assert!(!xml.contains("<assemble"));
         assert!(xml.contains("object id=\"1\""));
         assert!(xml.contains("object id=\"11\""));
         assert!(xml.contains("key=\"print_flow_ratio\" value=\"1.05\""));
@@ -460,15 +462,45 @@ mod tests {
                     let modifier: f64 = signed.parse().unwrap_or(0.0);
                     let print_flow_ratio = 1.0 + modifier / 100.0;
                     let _ = baseline_flow_ratio; // percent formula doesn't need it
+                    // The FULL per-object override set production applies
+                    // (flowCalibration.ts FLOW_OBJECT_FIXED_OVERRIDES + the
+                    // nozzle-dependent line widths). Several of these disable
+                    // mesh-analysis features (seam_slope, ironing, …) — omitting
+                    // them (as an earlier 5-key version did) leaves the GUI's
+                    // self-intersection check enabled and crashes on load.
                     serde_json::json!({
                         "id": o.id,
                         "name": o.name,
                         "overrides": {
                             "print_flow_ratio": format!("{:.4}", print_flow_ratio),
                             "wall_loops": "1",
+                            "only_one_wall_top": "1",
+                            "thick_internal_bridges": "0",
+                            "enable_extra_bridge_layer": "disabled",
+                            "internal_bridge_density": "100%",
                             "sparse_infill_density": "35%",
+                            "min_width_top_surface": "100%",
+                            "bottom_shell_layers": "2",
+                            "top_shell_layers": "5",
+                            "top_shell_thickness": "0",
+                            "bottom_shell_thickness": "0",
+                            "detect_thin_wall": "1",
+                            "filter_out_gap_fill": "0",
                             "sparse_infill_pattern": "rectilinear",
-                            "top_surface_pattern": "archimedeanchords"
+                            "top_surface_pattern": "archimedeanchords",
+                            "top_solid_infill_flow_ratio": "1",
+                            "infill_direction": "45",
+                            "solid_infill_direction": "135",
+                            "center_of_surface_pattern": "each_surface",
+                            "separated_infills": "0",
+                            "align_infill_direction_to_model": "1",
+                            "ironing_type": "no ironing",
+                            "calib_flowrate_topinfill_special_order": "1",
+                            "top_surface_fill_order": "default",
+                            "seam_slope_type": "none",
+                            "gap_fill_target": "nowhere",
+                            "top_surface_line_width": "0.48",
+                            "internal_solid_infill_line_width": "0.48"
                         }
                     })
                 })
@@ -510,6 +542,10 @@ mod tests {
         )
         .unwrap();
         println!("assembled: {} entries, added config: {}", result.entry_count, !result.config_replaced);
+        if let Ok(dst) = std::env::var("PF_EMIT_PROJECT") {
+            std::fs::copy(&result.project_path, &dst).unwrap();
+            println!("EMITTED PROJECT: {dst}");
+        }
 
         let datadir = d.join("datadir");
         let outdir = d.join("out");
