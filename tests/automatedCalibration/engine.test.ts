@@ -656,6 +656,31 @@ describe('InstalledOrcaEngine.prepareProject (flow-rate calibration)', () => {
     const cfg = JSON.parse(captured!.mergedConfigJson);
     expect(cfg.layer_height).toBe('0.2');
     expect(cfg.reduce_crossing_wall).toBe('1');
+    // A preset with no bed_exclude_area gets a minimal corner exclusion so
+    // OrcaSlicer's conflict checker doesn't reject the tight plate (-101).
+    expect(cfg.bed_exclude_area).toEqual(['0x0', '1x0', '1x1', '0x1']);
+  });
+
+  it('keeps a preset\'s own bed_exclude_area instead of overriding it', async () => {
+    let captured: AssembleFlowArgs | null = null;
+    const engine = new InstalledOrcaEngine(
+      fakeBridge({
+        listFlowTestObjects: async () => FLOW_PASS1_OBJECTS,
+        assembleFlowTest: async (a) => {
+          captured = a;
+          return ASSEMBLED;
+        }
+      })
+    );
+    await engine.detect();
+    const step = getStepDefinition('flow-pass1')!;
+    const withExclusion = {
+      ...RESOLVED_FOR_FLOW,
+      settings: { ...RESOLVED_FOR_FLOW.settings, bed_exclude_area: ['0x0', '18x0', '18x28', '0x28'] }
+    };
+    await engine.prepareProject(tempSession(), step, withExclusion);
+    const cfg = JSON.parse(captured!.mergedConfigJson);
+    expect(cfg.bed_exclude_area).toEqual(['0x0', '18x0', '18x28', '0x28']);
   });
 
   it('requires a resolved preset (the template plate has no embedded config)', async () => {

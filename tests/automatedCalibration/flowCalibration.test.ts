@@ -5,6 +5,8 @@ import {
   buildFlowObjectOverrides,
   buildFlowPlateOverrides,
   nozzleDependentObjectOverrides,
+  bedExclusionIsEmpty,
+  FLOW_FALLBACK_BED_EXCLUDE_AREA,
   FLOW_OBJECT_FIXED_OVERRIDES,
   FLOW_STEP_METHOD
 } from '../../src/automatedCalibration/flowCalibration';
@@ -116,5 +118,25 @@ describe('FLOW_STEP_METHOD', () => {
     expect(FLOW_STEP_METHOD['flow-pass1']).toBe('percent');
     expect(FLOW_STEP_METHOD['flow-pass2']).toBe('percent');
     expect(FLOW_STEP_METHOD['flow-verify']).toBe('percent');
+  });
+});
+
+describe('bedExclusionIsEmpty (OrcaSlicer conflict-checker workaround)', () => {
+  it('treats a missing or empty bed_exclude_area as empty', () => {
+    expect(bedExclusionIsEmpty(undefined)).toBe(true);
+    expect(bedExclusionIsEmpty(null)).toBe(true);
+    expect(bedExclusionIsEmpty([])).toBe(true);
+  });
+
+  it('treats a defined exclusion polygon as non-empty', () => {
+    expect(bedExclusionIsEmpty(['0x0', '18x0', '18x28', '0x28'])).toBe(false);
+    expect(bedExclusionIsEmpty(FLOW_FALLBACK_BED_EXCLUDE_AREA)).toBe(false);
+  });
+
+  it('supplies a non-degenerate corner polygon as the fallback', () => {
+    // Four points (a real quad) so Orca's conflict checker sees a valid
+    // exclusion; a 1x1 mm corner clips nothing the centred objects use.
+    expect(FLOW_FALLBACK_BED_EXCLUDE_AREA).toHaveLength(4);
+    expect(FLOW_FALLBACK_BED_EXCLUDE_AREA[0]).toBe('0x0');
   });
 });

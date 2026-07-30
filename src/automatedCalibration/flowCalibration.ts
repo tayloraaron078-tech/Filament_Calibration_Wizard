@@ -144,6 +144,36 @@ export function buildFlowPlateOverrides(
   };
 }
 
+/**
+ * A minimal bed exclusion applied to the flow-test plate when the resolved
+ * printer preset declares NONE.
+ *
+ * OrcaSlicer's g-code path-conflict checker (CLI exit -101 =
+ * `CLI_GCODE_PATH_CONFLICTS`) spuriously rejects the flow test's tightly-packed
+ * multi-object plate (nine 40×30 mm objects with ~2 mm gaps) when the machine
+ * preset's `bed_exclude_area` is empty. Verified against real OrcaSlicer 2.4.2:
+ * stripping the Bambu X1 Carbon's own exclude area reproduces the -101, and any
+ * non-empty polygon — even a 1×1 mm square in the (0,0) corner — suppresses it.
+ * Presets that already define an exclusion (e.g. Bambu X1C) are untouched; ones
+ * whose exclusion is legitimately empty (e.g. Bambu H2S) need this. The
+ * calibration objects are centred on the plate and never reach the corner, so
+ * the exclusion clips nothing — and it lives only in the throwaway calibration
+ * project, never in any of the user's saved presets.
+ */
+export const FLOW_FALLBACK_BED_EXCLUDE_AREA: readonly string[] = Object.freeze([
+  '0x0',
+  '1x0',
+  '1x1',
+  '0x1'
+]);
+
+/** True when a config's `bed_exclude_area` is missing or an empty array — the
+ *  state that trips OrcaSlicer's conflict checker on the flow plate (see
+ *  `FLOW_FALLBACK_BED_EXCLUDE_AREA`). */
+export function bedExclusionIsEmpty(value: unknown): boolean {
+  return value == null || (Array.isArray(value) && value.length === 0);
+}
+
 /** Which formula a registered flow-calibration step uses. All three steps
  *  currently wired to an asset (`flow-pass1`, `flow-pass2`, `flow-verify`) are
  *  Orca's legacy percent-modifier tests; the linear/YOLO test isn't registered

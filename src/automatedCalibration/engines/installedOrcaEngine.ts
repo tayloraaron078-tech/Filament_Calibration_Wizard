@@ -57,6 +57,8 @@ import {
   buildFlowPlateOverrides,
   computePrintFlowRatio,
   parseObjectFlowModifier,
+  bedExclusionIsEmpty,
+  FLOW_FALLBACK_BED_EXCLUDE_AREA,
   FLOW_STEP_METHOD
 } from '../flowCalibration';
 import { getPrinterSpec } from '../../data/printerDatabase';
@@ -475,6 +477,15 @@ export class InstalledOrcaEngine implements SlicingEngine {
     const initialLayerHeight = firstNumber(config.initial_layer_print_height) ?? undefined;
     for (const [key, value] of Object.entries(buildFlowPlateOverrides(nozzleDiameterMm, initialLayerHeight))) {
       config[key] = value;
+    }
+    // Work around an OrcaSlicer conflict-checker quirk: a machine preset with an
+    // empty `bed_exclude_area` makes the CLI reject this tightly-packed
+    // multi-object plate with CLI_GCODE_PATH_CONFLICTS (-101). A minimal corner
+    // exclusion suppresses it and clips nothing (the objects are centred). Only
+    // applied when the resolved preset declares none — see
+    // FLOW_FALLBACK_BED_EXCLUDE_AREA.
+    if (bedExclusionIsEmpty(config.bed_exclude_area)) {
+      config.bed_exclude_area = [...FLOW_FALLBACK_BED_EXCLUDE_AREA];
     }
 
     const rawObjects = await this.bridge.listFlowTestObjects(templatePath);

@@ -337,7 +337,7 @@ export async function renderAutomated(root: HTMLElement, id: string): Promise<vo
           : null,
         resultBox
       ),
-      done ? h('a', { class: 'btn btn-sm', href: `#/wizard/${p.id}/${sid}` }, 'Review / redo') : runBtn
+      done ? h('a', { class: 'btn btn-sm', href: `#/wizard/${p.id}/${sid}/automated` }, 'Review / redo') : runBtn
     ));
   }
   root.append(stepsCard);
@@ -463,7 +463,7 @@ async function prepareAndSlice(args: {
       h('p', { class: 'field-help' },
         `“Open in ${engine.displayName}” loads the sliced plate so you can send it to your printer or export to SD. “Show sliced files” opens the folder — the g-code there can go on an SD card or into any other slicer (Bambu Studio, etc.).`),
       h('div', { class: 'btn-row' },
-        h('a', { class: 'btn btn-sm', href: `#/wizard/${session.id}/${stepDef.id}` },
+        h('a', { class: 'btn btn-sm', href: `#/wizard/${session.id}/${stepDef.id}/automated` },
           '→ Record your measured result'))
     ));
   } else {

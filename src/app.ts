@@ -20,7 +20,7 @@ export type Route =
   | { view: 'printers' }
   | { view: 'new-project' }
   | { view: 'project'; id: string }
-  | { view: 'wizard'; id: string; step: CalibrationId }
+  | { view: 'wizard'; id: string; step: CalibrationId; origin?: 'automated' }
   | { view: 'card'; id: string }
   | { view: 'report'; id: string }
   | { view: 'profile'; id: string }
@@ -66,7 +66,9 @@ export function parseHash(): Route {
     case 'printers': return { view: 'printers' };
     case 'new': return { view: 'new-project' };
     case 'project': return parts[1] ? { view: 'project', id: parts[1] } : { view: 'dashboard' };
-    case 'wizard': return parts[1] && parts[2] ? { view: 'wizard', id: parts[1], step: parts[2] as CalibrationId } : { view: 'dashboard' };
+    case 'wizard': return parts[1] && parts[2]
+      ? { view: 'wizard', id: parts[1], step: parts[2] as CalibrationId, origin: parts[3] === 'automated' ? 'automated' : undefined }
+      : { view: 'dashboard' };
     case 'card': return parts[1] ? { view: 'card', id: parts[1] } : { view: 'dashboard' };
     case 'report': return parts[1] ? { view: 'report', id: parts[1] } : { view: 'dashboard' };
     case 'profile': return parts[1] ? { view: 'profile', id: parts[1] } : { view: 'dashboard' };
@@ -87,7 +89,7 @@ async function route(): Promise<void> {
       case 'printers': await renderPrinters(outlet); break;
       case 'new-project': await renderNewProject(outlet); break;
       case 'project': await renderProject(outlet, r.id); break;
-      case 'wizard': await renderWizard(outlet, r.id, r.step); break;
+      case 'wizard': await renderWizard(outlet, r.id, r.step, r.origin); break;
       case 'card': await renderCard(outlet, r.id); break;
       case 'report': await renderReport(outlet, r.id); break;
       case 'profile': await renderProfileWizard(outlet, r.id); break;

@@ -545,6 +545,109 @@ mod tests {
         std::fs::remove_dir_all(&security::job_root("sess-flowtest", "job-flowtest").unwrap()).ok();
     }
 
+    /// Supervised real-Orca proof for the empty-`bed_exclude_area` workaround.
+    ///
+    /// A machine preset whose `bed_exclude_area` is empty (e.g. Bambu H2S) makes
+    /// OrcaSlicer's g-code path-conflict checker spuriously reject this tightly-
+    /// packed 9-object flow plate with `CLI_GCODE_PATH_CONFLICTS` (-101) — even
+    /// though the objects don't overlap and no wipe/prime tower is generated
+    /// (single filament). The Bambu X1 Carbon only slices because its preset
+    /// happens to define a non-empty exclusion; strip that and the X1C fails too.
+    /// The production fix (`flowCalibration::FLOW_FALLBACK_BED_EXCLUDE_AREA`,
+    /// applied in `InstalledOrcaEngine.prepareFlowTest`) sets a minimal 1×1 mm
+    /// corner exclusion when the resolved preset declares none; the objects are
+    /// centred and never reach the corner, so it clips nothing. This probe proves
+    /// the H2S flow plate slices once that fallback is present. Run with
+    /// `cargo test -- --ignored probe_h2s_flow_test_bed_exclude_fix`.
+    #[test]
+    #[ignore]
+    fn probe_h2s_flow_test_bed_exclude_fix() {
+        use crate::slicer_integration::test_support;
+        use std::process::{Command, Stdio};
+        let orca = test_support::orca_exe();
+        let template = test_support::orca_calib("filament_flow/flowrate-test-pass1.3mf");
+        if !orca.is_file() || !template.is_file() {
+            eprintln!("SKIP: Orca / flow template not present");
+            return;
+        }
+
+        let raw_objects = list_flow_test_objects(template.display().to_string()).unwrap();
+        assert_eq!(raw_objects.len(), 9, "flowrate-test-pass1.3mf ships 9 objects");
+        let objects_json = serde_json::to_string(
+            &raw_objects
+                .iter()
+                .map(|o| {
+                    let suffix = &o.name[9..];
+                    let signed = if let Some(rest) = suffix.strip_prefix('m') {
+                        format!("-{rest}")
+                    } else {
+                        suffix.to_string()
+                    };
+                    let modifier: f64 = signed.parse().unwrap_or(0.0);
+                    serde_json::json!({
+                        "id": o.id,
+                        "name": o.name,
+                        "overrides": { "print_flow_ratio": format!("{:.4}", 1.0 + modifier / 100.0) }
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        // Resolve the real Bambu H2S — its machine preset's bed_exclude_area is
+        // empty, which is exactly the condition the production fix handles.
+        super::super::engine::detect_slicing_engine("installed_orca".to_string(), None).unwrap();
+        let resolved = super::super::preset_resolver::resolve_printer_preset(
+            "installed_orca".to_string(),
+            "BBL".to_string(),
+            "Bambu Lab H2S 0.4 nozzle".to_string(),
+            "0.20mm Standard @BBL H2S".to_string(),
+            "Bambu PLA Basic @BBL H2S".to_string(),
+        )
+        .unwrap();
+        let mut cfg: serde_json::Value = serde_json::from_str(&resolved.settings_json).unwrap();
+        let exclusion = cfg.get("bed_exclude_area").and_then(|v| v.as_array());
+        assert!(
+            exclusion.map(|a| a.is_empty()).unwrap_or(true),
+            "expected the H2S preset to have an empty bed_exclude_area (the bug's trigger)"
+        );
+        // Apply the SAME minimal-corner fallback the production code applies
+        // (flowCalibration::FLOW_FALLBACK_BED_EXCLUDE_AREA).
+        cfg["bed_exclude_area"] = serde_json::json!(["0x0", "1x0", "1x1", "0x1"]);
+
+        let d = temp_dir("h2sflowfix");
+        let session_id = format!("probe-h2sfix-{}", super::super::now_unix());
+        let result = assemble_flow_test(
+            "installed_orca".to_string(),
+            session_id.clone(),
+            "job-1".to_string(),
+            template.display().to_string(),
+            serde_json::to_string(&cfg).unwrap(),
+            objects_json,
+            "project.3mf".to_string(),
+        )
+        .unwrap();
+
+        let datadir = d.join("datadir");
+        let outdir = d.join("out");
+        std::fs::create_dir_all(&datadir).unwrap();
+        std::fs::create_dir_all(&outdir).unwrap();
+        let status = Command::new(&orca)
+            .arg("--datadir").arg(&datadir)
+            .arg("--outputdir").arg(&outdir)
+            .arg("--slice").arg("0")
+            .arg(&result.project_path)
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+            .status()
+            .expect("failed to launch orca");
+        let gcode = outdir.join("plate_1.gcode");
+        println!("H2S+fix orca exit={:?} gcode_exists={}", status.code(), gcode.is_file());
+        assert!(gcode.is_file(), "H2S flow plate should slice with the bed_exclude_area fallback");
+        assert!(std::fs::metadata(&gcode).unwrap().len() > 1000, "g-code implausibly small");
+        std::fs::remove_dir_all(&d).ok();
+        std::fs::remove_dir_all(&security::job_root(&session_id, "job-1").unwrap()).ok();
+    }
+
     /// Supervised real-Orca proof: assemble one of Orca's real shipped flow-rate
     /// plates with genuine per-object `print_flow_ratio` overrides computed the
     /// way Orca's own C++ does, and headless-slice it. Run with
