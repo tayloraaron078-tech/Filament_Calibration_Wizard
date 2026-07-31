@@ -140,7 +140,6 @@ export function migrate(file: BackupFile): BackupFile {
     p.finals = p.finals ?? {};
     p.archived = !!p.archived;
     p.generatedProfiles = Array.isArray(p.generatedProfiles) ? p.generatedProfiles : [];
-    p.stepOrder = Array.isArray(p.stepOrder) && p.stepOrder.length ? p.stepOrder : p.stepOrder;
     for (const key of Object.keys(p.steps ?? {})) {
       const st = (p.steps as Record<string, { history?: unknown[] }>)[key];
       if (st && !Array.isArray(st.history)) st.history = [];
