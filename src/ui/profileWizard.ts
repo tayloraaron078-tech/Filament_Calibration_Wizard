@@ -11,7 +11,7 @@ import { getProject, getPrinter, saveProject, addTimeline, uid } from '../storag
 import type { CalibrationProject, PrinterProfile } from '../types';
 import type {
   DetectedFilamentProfile, GeneratedFilamentProfile, GeneratedProfileRecord,
-  IntegrationSlicerId, ParsedFilamentProfile, ProfileInstallResult,
+  IntegrationSlicerId, ParsedFilamentProfile, Platform, ProfileInstallResult,
   ProfileValidationResult, ScoredProfile, SlicerInstallation, UserDataLocation
 } from '../slicerIntegration/types';
 import * as bridge from '../slicerIntegration/bridge';
@@ -129,6 +129,19 @@ function stageNav(st: WizState): HTMLElement {
 
 // --- stage 1: slicer --------------------------------------------------------
 
+/** Open call for macOS users to verify install paths and process names. */
+const MACOS_VERIFICATION_ISSUE_URL =
+  'https://github.com/tayloraaron078-tech/Filament_Calibration_Wizard/issues/24';
+
+/**
+ * Direct install is only verified on Windows so far. macOS users are pointed at the
+ * verification issue so they can help; Linux verification is being done separately
+ * and deliberately has no call for help here yet.
+ */
+export function macosVerificationNoticeUrl(platform: Platform): string | null {
+  return platform === 'macos' ? MACOS_VERIFICATION_ISSUE_URL : null;
+}
+
 async function renderSlicerStage(
   root: HTMLElement, st: WizState, project: CalibrationProject, rerender: () => void
 ): Promise<void> {
@@ -157,6 +170,17 @@ async function renderSlicerStage(
     return;
   }
 
+  // Resolved once for the whole stage: the per-version verification lookup below must
+  // match the user's actual OS, not an assumed one.
+  const platform = await currentPlatform();
+  const macosNoticeUrl = macosVerificationNoticeUrl(platform);
+  if (macosNoticeUrl) {
+    card.append(h('p', { class: 'field-help' },
+      'macOS support for direct profile installation is unverified. You can help: ',
+      h('a', { href: macosNoticeUrl, target: '_blank', rel: 'noopener' },
+        'verify the install paths on macOS ↗')));
+  }
+
   const preferred = integrationIdsForProjectSlicer(project.slicer.slicer);
   const sorted = [...st.installations].sort((a, b) =>
     Number(preferred.includes(b.slicerId)) - Number(preferred.includes(a.slicerId)));
@@ -167,7 +191,6 @@ async function renderSlicerStage(
   }
 
   for (const inst of sorted) {
-    const platform = 'windows' as const; // desktop build platform is resolved natively; registry lookup below re-checks
     const verified = findVerifiedVersion(inst.slicerId, inst.version, platform);
     const canInstall = inst.capabilities.canInstallDirectly;
     const locations = inst.userDataLocations;
