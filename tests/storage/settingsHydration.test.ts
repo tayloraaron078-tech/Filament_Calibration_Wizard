@@ -123,3 +123,89 @@ describe('hydrateSettingsFromServer', () => {
     expect(await res.json()).toEqual({ theme: 'dark', largeText: true, defaultMode: 'expert', mvsSafetyMargin: 0.7 });
   });
 });
+
+describe('hydrateSettingsFromServer sets connectionState (three-state detection)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is no-backend when the health check fails', async () => {
+    stubLocalStorage();
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('no backend in this test')));
+    const store = await freshStore();
+    const { getConnectionState } = await import('../../src/storage/connectionState');
+
+    await store.hydrateSettingsFromServer();
+
+    expect(getConnectionState()).toBe('no-backend');
+  });
+
+  it('is connected when the server is reachable and requires no token', async () => {
+    const server = await startTestServer();
+    try {
+      stubLocalStorage();
+      stubRelativeFetch(server.baseUrl);
+      const store = await freshStore();
+      const { getConnectionState } = await import('../../src/storage/connectionState');
+
+      await store.hydrateSettingsFromServer();
+
+      expect(getConnectionState()).toBe('connected');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('is needs-token when the server requires a token and none is stored', async () => {
+    const server = await startTestServer('secret-token');
+    try {
+      stubLocalStorage();
+      stubRelativeFetch(server.baseUrl);
+      const store = await freshStore();
+      const { getConnectionState } = await import('../../src/storage/connectionState');
+
+      await store.hydrateSettingsFromServer();
+
+      expect(getConnectionState()).toBe('needs-token');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('is connected when the server requires a token and the stored one is valid', async () => {
+    const server = await startTestServer('secret-token');
+    try {
+      stubLocalStorage();
+      stubRelativeFetch(server.baseUrl);
+      localStorage.setItem('perfectfit.apiToken', 'secret-token');
+      const store = await freshStore();
+      const { getConnectionState } = await import('../../src/storage/connectionState');
+
+      await store.hydrateSettingsFromServer();
+
+      expect(getConnectionState()).toBe('connected');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('transitions from needs-token to connected after storing a valid token and re-hydrating', async () => {
+    const server = await startTestServer('secret-token');
+    try {
+      stubLocalStorage();
+      stubRelativeFetch(server.baseUrl);
+      const store = await freshStore();
+      const { getConnectionState } = await import('../../src/storage/connectionState');
+
+      await store.hydrateSettingsFromServer();
+      expect(getConnectionState()).toBe('needs-token');
+
+      localStorage.setItem('perfectfit.apiToken', 'secret-token');
+      await store.hydrateSettingsFromServer();
+
+      expect(getConnectionState()).toBe('connected');
+    } finally {
+      await server.close();
+    }
+  });
+});

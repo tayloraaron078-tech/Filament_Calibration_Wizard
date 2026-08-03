@@ -150,12 +150,15 @@ Served over HTTP(S), the app also installs as a PWA and works offline after firs
 
 The repository ships a `Dockerfile` and an `example-docker-compose.yaml` for
 running the app as a container. The image is a multi-stage build: Node builds
-the static bundle, which is then served by a tiny BusyBox `httpd` — no Node,
-backend, or database in the runtime layer.
+the static bundle, then a `node:24-slim` runtime layer serves both that
+bundle and the opt-in self-hosted persistence API (`server/`, Node's built-in
+`http` + `node:sqlite`, no extra npm dependencies) on one origin.
 
 ```bash
 docker build -t perfectfit:latest .
-docker run -d -p 8080:80 --name perfectfit perfectfit:latest   # http://localhost:8080
+docker run -d -p 8080:80 --name perfectfit \
+  -v perfectfit-data:/data \
+  perfectfit:latest   # http://localhost:8080
 ```
 
 `example-docker-compose.yaml` is a sample stack for reverse-proxying the
@@ -164,8 +167,48 @@ TLS. Adjust the `Host(...)` rule, network, and image name to match your setup.
 Because the app uses hash-based routing and relative paths, the static server
 needs no SPA-fallback configuration.
 
-> The same per-origin storage note from the Nginx section applies: data lives
-> in the browser under the origin you serve from.
+### Self-hosted server mode
+
+Running the container gives you server-side persistence automatically —
+there's nothing to turn on. The app probes for the API at startup; when it
+finds one, projects, printer profiles, photos, and settings are read from and
+written to the server's SQLite database (bind-mounted at `/data` by default)
+instead of the browser's IndexedDB, so your data is no longer tied to one
+browser/device. If no server responds (e.g. you're just running `npm run
+build` output on plain Nginx, or opening `dist/index.html` directly), the app
+falls back to the original browser-only storage with no change in behavior.
+
+By default the server has **no authentication** — fine for a container only
+reachable on your own LAN/VPN. To require a token, set `PERFECTFIT_API_TOKEN`
+on the container (see `example-docker-compose.yaml`):
+
+```bash
+openssl rand -hex 32   # generate a token
+docker run -d -p 8080:80 --name perfectfit \
+  -v perfectfit-data:/data \
+  -e PERFECTFIT_API_TOKEN=<generated token> \
+  perfectfit:latest
+```
+
+Only rely on this token behind TLS (e.g. the Traefik example) — it's sent as
+a plain `Authorization: Bearer` header, not a full auth system. Once a token
+is set, the app's Settings → *Server connection* card prompts for it before
+data will load or save. You can hand it to a browser once via
+`https://your-host/?token=<token>` — the app stores it in localStorage and
+strips it from the URL immediately, so it never lingers in history or
+bookmarks.
+
+**Migrating existing browser-only data to a server-connected instance:** in
+the OLD instance (the one with your existing projects/printers/photos in
+browser storage), go to Settings → *⭳ Export all data + photos* to download a
+backup. Open the NEW server-connected instance and use Settings → *📥 Restore
+from backup* to import it — same export/restore mechanism used for regular
+backups, it works identically whether the destination is browser-only or
+server-backed.
+
+> The same per-origin storage note from the Nginx section applies when no
+> server is connected: data lives in the browser under the origin you serve
+> from.
 
 ## Packaging as a desktop app (Tauri)
 
@@ -192,8 +235,8 @@ Settings is the supported migration path between browser and desktop builds.
 
 | What | Where |
 |---|---|
-| Projects, printer profiles, photos | IndexedDB (`perfectfit-db`) |
-| Settings, in-progress form drafts | localStorage |
+| Projects, printer profiles, photos | IndexedDB (`perfectfit-db`) — or the server's SQLite database if you're connected to one, see [Docker → Self-hosted server mode](#self-hosted-server-mode) |
+| Settings, in-progress form drafts | localStorage (settings also sync to the server when connected) |
 | Backups | JSON files you export (Settings → Backup) |
 
 - **Backup**: Settings → *Export all data* (optionally with photos, base64-embedded).

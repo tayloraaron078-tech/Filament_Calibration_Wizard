@@ -4,7 +4,8 @@ import type {
 } from '../types';
 import { DEFAULT_ORDER } from '../data/calibrations';
 import { idb } from './db';
-import { backendReady, http, isBackendReadySync } from './serverBridge';
+import { ApiError, backendReady, http, isBackendReadySync } from './serverBridge';
+import { deriveConnectionState, setConnectionState } from './connectionState';
 
 /**
  * v1: original release.
@@ -62,19 +63,31 @@ export function saveSettings(s: AppSettings): void {
 /**
  * Pulls settings from the backend (if any) into localStorage before the app's
  * first synchronous loadSettings() call. Must be awaited once, early, at
- * startup (see main.ts) — a no-op when no backend is reachable.
+ * startup (see main.ts) — a no-op when no backend is reachable. Also this is
+ * where connectionState.ts's three-state detection is resolved: a 401 here
+ * means a token is required and missing/wrong ('needs-token'), any other
+ * outcome after a successful health check means 'connected' — the server IS
+ * reachable, so an unrelated fetch hiccup shouldn't be reported as an auth
+ * problem. Also re-run (from Settings) after the user saves a new token, to
+ * re-check the connection without a full page reload.
  */
 export async function hydrateSettingsFromServer(): Promise<void> {
   const ready = await backendReady();
-  if (!ready) return;
+  if (!ready) {
+    setConnectionState(deriveConnectionState({ healthOk: false, authFailed: false }));
+    return;
+  }
+  let authFailed = false;
   try {
     const serverSettings = await http.getSettings();
     if (serverSettings) {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...serverSettings }));
     }
   } catch (err) {
-    console.warn('Failed to hydrate settings from server', err);
+    authFailed = err instanceof ApiError && err.status === 401;
+    if (!authFailed) console.warn('Failed to hydrate settings from server', err);
   }
+  setConnectionState(deriveConnectionState({ healthOk: true, authFailed }));
 }
 
 /** Auto-save of in-progress form data, keyed by project+step. */

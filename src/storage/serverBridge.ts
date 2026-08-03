@@ -50,10 +50,34 @@ export function isBackendReadySync(): boolean {
   return backendReadyValue;
 }
 
+// --- token storage ----------------------------------------------------------
+// Shared with main.ts's ?token= capture-and-strip flow and the Settings
+// "Server connection" card, so both go through one key/accessor set.
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setStoredToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 // --- fetch helpers ------------------------------------------------------------
 
+/** Thrown by the request helpers below instead of a plain Error, so callers (namely connectionState detection) can tell a 401 apart from other failures. */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 function authHeaders(): HeadersInit {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = getStoredToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -67,13 +91,13 @@ function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 async function getJson<T>(path: string): Promise<T | undefined> {
   const res = await apiFetch(path);
   if (res.status === 404) return undefined;
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`GET ${path} failed: ${res.status}`, res.status);
   return (await res.json()) as T;
 }
 
 async function listJson<T>(path: string): Promise<T[]> {
   const res = await apiFetch(path);
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`GET ${path} failed: ${res.status}`, res.status);
   return (await res.json()) as T[];
 }
 
@@ -83,12 +107,12 @@ async function putJson(path: string, body: unknown): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`PUT ${path} failed: ${res.status}`, res.status);
 }
 
 async function del(path: string): Promise<void> {
   const res = await apiFetch(path, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`DELETE ${path} failed: ${res.status}`, res.status);
 }
 
 // --- photo wire helpers ---------------------------------------------------
@@ -165,11 +189,10 @@ export const http = {
   deletePhoto: (id: string): Promise<void> => del(`/photos/${encodeURIComponent(id)}`),
 
   getSettings: (): Promise<AppSettings | null> => apiFetch('/settings').then(async (res) => {
-    if (!res.ok) throw new Error(`GET /settings failed: ${res.status}`);
+    if (!res.ok) throw new ApiError(`GET /settings failed: ${res.status}`, res.status);
     return (await res.json()) as AppSettings | null;
   }),
   putSettings: (s: AppSettings): Promise<void> => putJson('/settings', s),
 
-  /** Not wired into store.ts yet — the "erase all local data" UI is phase 3's job. */
   bulkErase: (): Promise<void> => del('/data')
 };

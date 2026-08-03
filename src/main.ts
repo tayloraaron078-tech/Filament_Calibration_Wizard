@@ -1,8 +1,26 @@
 import './styles.css';
 import { startApp } from './app';
 import { hydrateSettingsFromServer } from './storage/store';
+import { setStoredToken } from './storage/serverBridge';
+import { captureTokenFromUrl } from './storage/tokenCapture';
+
+/**
+ * A self-hosted deployment can hand a user a one-time `?token=...` link
+ * carrying their PERFECTFIT_API_TOKEN. Captured into localStorage and
+ * stripped from the URL immediately (before hydrateSettingsFromServer() so
+ * the freshly-captured token is used on the very first backend call, not
+ * just saved for next time) so it never lingers in history/bookmarks/Referer.
+ */
+function captureTokenFromLocation(): void {
+  const { token, strippedUrl } = captureTokenFromUrl(location.href);
+  if (!token) return;
+  setStoredToken(token);
+  history.replaceState(null, '', strippedUrl);
+}
 
 async function bootstrap(): Promise<void> {
+  captureTokenFromLocation();
+
   // Must resolve before startApp()'s first synchronous loadSettings() call so
   // server-side settings (if any backend is configured) win over stale local
   // ones on load. No-op — resolves promptly — when no backend is reachable.

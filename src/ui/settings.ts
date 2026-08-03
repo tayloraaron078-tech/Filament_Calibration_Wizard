@@ -1,11 +1,12 @@
 import { h, clear, field, numberInput, toast, confirmDialog, download } from './dom';
-import { loadSettings, saveSettings } from '../storage/store';
+import { loadSettings, saveSettings, hydrateSettingsFromServer } from '../storage/store';
 import { exportAll, importBackup } from '../export/backup';
 import { importFilePicker } from './importExport';
 import { applyTheme } from '../app';
 import { idb } from '../storage/db';
-import { http, isBackendReadySync } from '../storage/serverBridge';
+import { http, isBackendReadySync, getStoredToken, setStoredToken, clearStoredToken } from '../storage/serverBridge';
 import { eraseEverything } from '../storage/eraseEverything';
+import { getConnectionState } from '../storage/connectionState';
 import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerIntegration/featureFlags';
 import * as bridge from '../slicerIntegration/bridge';
 import { backupDetectedPresetLibraries, totalFileCount } from '../slicerIntegration/libraryBackup';
@@ -86,11 +87,12 @@ export function renderSettings(root: HTMLElement): void {
     ),
     experimentalCard(),
     slicerBackupsCard(),
+    serverConnectionCard(root),
     h('div', { class: 'card' },
       h('h2', { style: 'margin-top:0' }, 'Privacy'),
       h('ul', {},
         h('li', {}, 'No account. No cloud. No analytics, ads, trackers, or telemetry.'),
-        h('li', {}, 'Nothing you enter — including photos — ever leaves this device.'),
+        h('li', {}, privacyDataLine()),
         h('li', {}, 'External model links open third-party websites; nothing is sent to them from your data.'),
         h('li', {}, 'The optional offline (PWA) cache stores only the app\'s own files.'))
     ),
@@ -137,6 +139,91 @@ export function renderSettings(root: HTMLElement): void {
             location.hash = '#/'; location.reload();
           }
         }, '⚠ Erase everything, including server data') : null)
+    )
+  );
+}
+
+/** Privacy card's data-location bullet — the flat "never leaves this device" claim is only true in 'no-backend' mode. */
+function privacyDataLine(): string {
+  return getConnectionState() === 'no-backend'
+    ? 'Nothing you enter — including photos — ever leaves this device.'
+    : 'Nothing you enter — including photos — leaves this device except to your own connected server. Never a third party.';
+}
+
+/**
+ * 'no-backend' (the common case) stays a single unobtrusive line rather than
+ * a full card, matching the "don't clutter the page for the default case"
+ * call in the phase spec. 'connected'/'needs-token' get a full card since
+ * there's an actual token field and (for 'needs-token') an action required.
+ */
+function serverConnectionCard(root: HTMLElement): HTMLElement {
+  const state = getConnectionState();
+
+  if (state === 'no-backend') {
+    return h('p', { class: 'field-help' }, 'Not connected to a server — everything is stored in this browser only.');
+  }
+
+  const rerender = () => { clear(root); renderSettings(root); };
+
+  const tokenField = (): HTMLElement => {
+    const current = getStoredToken();
+    const input = h('input', { type: 'password', placeholder: current ? 'Token is set — enter a new one to replace it' : 'No token set' }) as HTMLInputElement;
+    const saveBtn = h('button', {
+      class: 'btn btn-sm', onClick: () => {
+        const v = input.value.trim();
+        if (!v) { toast('Enter a token first.', 'error'); return; }
+        setStoredToken(v);
+        toast('API token saved.', 'success');
+        input.value = '';
+      }
+    }, 'Save token');
+    const clearBtn = current ? h('button', {
+      class: 'btn btn-sm btn-danger', onClick: () => {
+        clearStoredToken();
+        toast('API token cleared.', 'info');
+        rerender();
+      }
+    }, 'Clear token') : null;
+    return h('div', { class: 'field' },
+      h('label', {}, 'API token'),
+      h('div', { class: 'btn-row' }, input, saveBtn, clearBtn),
+      h('p', { class: 'field-help' }, current
+        ? 'A token is currently stored for this server.'
+        : 'No token is stored. If the server has no PERFECTFIT_API_TOKEN configured this is fine — leave it blank.')
+    );
+  };
+
+  if (state === 'connected') {
+    return h('div', { class: 'card' },
+      h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
+      h('p', {}, 'Connected to your self-hosted server. Projects, printer profiles, and photos now live there — not just in this browser.'),
+      h('p', { class: 'field-help' }, 'Use the "⭳ Export all data + photos" button above to keep a portable backup of the server\'s data.'),
+      tokenField()
+    );
+  }
+
+  // 'needs-token'
+  const input = h('input', { type: 'password', placeholder: 'Paste API token' }) as HTMLInputElement;
+  const connectBtn = h('button', {
+    class: 'btn btn-primary', onClick: async () => {
+      const v = input.value.trim();
+      if (!v) { toast('Enter a token first.', 'error'); return; }
+      setStoredToken(v);
+      await hydrateSettingsFromServer();
+      if (getConnectionState() === 'needs-token') {
+        toast('That token was not accepted.', 'error');
+        return;
+      }
+      toast('Connected.', 'success');
+      rerender();
+    }
+  }, 'Save & connect');
+  return h('div', { class: 'card' },
+    h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
+    h('p', {}, 'A server was found, but it requires an API token and none is set, or the stored one is invalid. Saving, printer, and photo actions will fail until this is fixed.'),
+    h('div', { class: 'field' },
+      h('label', {}, 'API token'),
+      h('div', { class: 'btn-row' }, input, connectBtn)
     )
   );
 }

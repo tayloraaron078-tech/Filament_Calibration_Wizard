@@ -258,3 +258,41 @@ describe('http.bulkErase', () => {
     expect(fetchMock).toHaveBeenCalledWith('./api/v1/data', expect.objectContaining({ method: 'DELETE' }));
   });
 });
+
+describe('token accessors', () => {
+  it('getStoredToken/setStoredToken/clearStoredToken round-trip through localStorage under a shared key', async () => {
+    const { getStoredToken, setStoredToken, clearStoredToken } = await freshModule();
+
+    expect(getStoredToken()).toBeNull();
+
+    setStoredToken('abc123');
+    expect(getStoredToken()).toBe('abc123');
+    expect(localStorage.getItem('perfectfit.apiToken')).toBe('abc123');
+
+    clearStoredToken();
+    expect(getStoredToken()).toBeNull();
+  });
+});
+
+describe('ApiError', () => {
+  it('carries the HTTP status on GET failures so callers can distinguish 401 from other errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 401 })));
+    const { http, ApiError } = await freshModule();
+
+    await expect(http.listProjects()).rejects.toMatchObject({ status: 401 });
+    try {
+      await http.listProjects();
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+    }
+  });
+
+  it('getSettings rejects with an ApiError carrying status on non-ok responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 401 })));
+    const { http, ApiError } = await freshModule();
+
+    await expect(http.getSettings()).rejects.toBeInstanceOf(ApiError);
+    await expect(http.getSettings()).rejects.toMatchObject({ status: 401 });
+  });
+});
