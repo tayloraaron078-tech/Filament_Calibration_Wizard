@@ -133,13 +133,14 @@ describe('photo binary round-trip', () => {
 
     const url =
       `${server.baseUrl}/api/v1/photos/photo-bin?projectId=p&stepId=s&attemptId=a` +
-      `&createdAt=${encodeURIComponent(new Date().toISOString())}&name=x.bin&type=application%2Foctet-stream`;
+      `&createdAt=${encodeURIComponent(new Date().toISOString())}&name=x.png&type=image%2Fpng`;
     const putRes = await fetch(url, { method: 'PUT', body: bytes });
     expect(putRes.status).toBe(204);
 
     const getRes = await fetch(`${server.baseUrl}/api/v1/photos/photo-bin`);
     expect(getRes.status).toBe(200);
-    expect(getRes.headers.get('content-type')).toBe('application/octet-stream');
+    expect(getRes.headers.get('content-type')).toBe('image/png');
+    expect(getRes.headers.get('x-content-type-options')).toBe('nosniff');
     const roundTripped = new Uint8Array(await getRes.arrayBuffer());
     expect(roundTripped).toEqual(bytes);
   });
