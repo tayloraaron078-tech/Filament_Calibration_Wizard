@@ -249,6 +249,10 @@ async function idbGetPhotosForProject(projectId: string): Promise<StoredPhoto[]>
   return idb.getAllByIndex<StoredPhoto>('photos', 'byProject', projectId);
 }
 
+async function idbListAllPhotos(): Promise<StoredPhoto[]> {
+  return idb.getAll<StoredPhoto>('photos');
+}
+
 async function idbDeletePhoto(id: string): Promise<void> {
   await idb.delete('photos', id);
 }
@@ -261,6 +265,12 @@ export async function savePhoto(photo: StoredPhoto): Promise<void> {
 export async function getPhotosForProject(projectId: string): Promise<StoredPhoto[]> {
   if (await backendReady()) return http.getPhotosForProject(projectId);
   return idbGetPhotosForProject(projectId);
+}
+
+/** Every photo across every project — used by exportAll's full-backup path. */
+export async function listAllPhotos(): Promise<StoredPhoto[]> {
+  if (await backendReady()) return http.listAllPhotos();
+  return idbListAllPhotos();
 }
 
 export async function deletePhoto(id: string): Promise<void> {

@@ -4,9 +4,16 @@ import { exportAll, importBackup } from '../export/backup';
 import { importFilePicker } from './importExport';
 import { applyTheme } from '../app';
 import { idb } from '../storage/db';
+import { http, isBackendReadySync } from '../storage/serverBridge';
+import { eraseEverything } from '../storage/eraseEverything';
 import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerIntegration/featureFlags';
 import * as bridge from '../slicerIntegration/bridge';
 import { backupDetectedPresetLibraries, totalFileCount } from '../slicerIntegration/libraryBackup';
+
+async function clearLocalData(): Promise<void> {
+  await idb.clear('projects'); await idb.clear('printers'); await idb.clear('photos');
+  localStorage.clear();
+}
 
 /**
  * Render a backup timestamp in the local time of the machine running the app.
@@ -109,7 +116,27 @@ export function renderSettings(root: HTMLElement): void {
             toast('All local data erased.', 'info');
             location.hash = '#/'; location.reload();
           }
-        }, '🗑 Erase all local data'))
+        }, '🗑 Erase all local data'),
+        isBackendReadySync() ? h('button', {
+          class: 'btn btn-danger', onClick: async () => {
+            const ok = await confirmDialog({
+              title: 'Erase everything, including server data?',
+              body: 'Deletes every project, printer profile, photo, and setting — on this device AND on the connected server, for every device that shares it. This cannot be undone. Export a backup first.',
+              confirmLabel: 'Erase everything', danger: true
+            });
+            if (!ok) return;
+            const really = await confirmDialog({
+              title: 'Really erase everything, including the server?',
+              body: 'Last chance — this also wipes the shared server copy that other devices are using. There is no cloud backup to recover from.',
+              confirmLabel: 'Yes, erase everything', danger: true
+            });
+            if (!really) return;
+            const result = await eraseEverything({ bulkErase: () => http.bulkErase(), clearLocal: clearLocalData });
+            if (!result.ok) { toast(result.message, 'error'); return; }
+            toast(result.message, 'info');
+            location.hash = '#/'; location.reload();
+          }
+        }, '⚠ Erase everything, including server data') : null)
     )
   );
 }

@@ -130,6 +130,20 @@ async function fetchPhotosForProject(projectId: string): Promise<StoredPhoto[]> 
   return photos;
 }
 
+/**
+ * Phase 1's server has no "list every photo across every project" endpoint
+ * (only per-project), and server/ is already-shipped, already-PR'd work —
+ * adding a route there for this would mean reopening that PR for a single
+ * export-time convenience call. Composing it from listProjects +
+ * getPhotosForProject instead costs one extra round-trip per project, which
+ * is fine for a single-user, modest-data-volume tool.
+ */
+async function fetchAllPhotos(): Promise<StoredPhoto[]> {
+  const projects = await listJson<CalibrationProject>('/projects');
+  const perProject = await Promise.all(projects.map((p) => fetchPhotosForProject(p.id)));
+  return perProject.flat();
+}
+
 // --- public HTTP-backed implementations of the store.ts API -----------------
 
 export const http = {
@@ -147,6 +161,7 @@ export const http = {
 
   savePhoto: (photo: StoredPhoto): Promise<void> => putPhotoHttp(photo),
   getPhotosForProject: (projectId: string): Promise<StoredPhoto[]> => fetchPhotosForProject(projectId),
+  listAllPhotos: (): Promise<StoredPhoto[]> => fetchAllPhotos(),
   deletePhoto: (id: string): Promise<void> => del(`/photos/${encodeURIComponent(id)}`),
 
   getSettings: (): Promise<AppSettings | null> => apiFetch('/settings').then(async (res) => {
