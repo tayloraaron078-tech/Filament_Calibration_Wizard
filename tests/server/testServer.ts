@@ -13,11 +13,11 @@ export interface TestServerHandle {
   close(): Promise<void>;
 }
 
-export async function startTestServer(apiToken?: string): Promise<TestServerHandle> {
+export async function startTestServer(apiToken?: string, staticDir?: string): Promise<TestServerHandle> {
   const dir = mkdtempSync(join(tmpdir(), 'perfectfit-server-test-'));
   const dbPath = join(dir, 'test.sqlite3');
   const db = openDatabase(dbPath);
-  const server = createServer({ db, apiToken });
+  const server = createServer({ db, apiToken, staticDir });
 
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address() as AddressInfo;

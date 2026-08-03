@@ -1,20 +1,24 @@
 // Entry point for the opt-in self-hosted persistence server. Standalone Node
 // script — no build step, Node 24 strips types natively (`node server/index.ts`).
 //
-// FORGE-NOTE: PERFECTFIT_PORT default (8787) is arbitrary — wiring this into
-// the Docker image's CMD/EXPOSE is a later phase, not this one.
+// PERFECTFIT_PORT defaults to 8787 for local/dev use; the Docker image
+// overrides it to 80 via ENV (see Dockerfile) since the container serves
+// both the API and the static SPA build (PERFECTFIT_STATIC_DIR) on one origin.
 import { createServer } from './createServer.ts';
 import { openDatabase } from './db.ts';
 
 const dbPath = process.env.PERFECTFIT_DB_PATH || './perfectfit.sqlite3';
 const port = Number(process.env.PERFECTFIT_PORT) || 8787;
 const apiToken = process.env.PERFECTFIT_API_TOKEN || undefined;
+const staticDir = process.env.PERFECTFIT_STATIC_DIR || './dist';
 
 const db = openDatabase(dbPath);
-const server = createServer({ db, apiToken });
+const server = createServer({ db, apiToken, staticDir });
 
 server.listen(port, () => {
-  console.log(`PerfectFit server listening on port ${port} (db: ${dbPath}, auth: ${apiToken ? 'on' : 'off'})`);
+  console.log(
+    `PerfectFit server listening on port ${port} (db: ${dbPath}, static: ${staticDir}, auth: ${apiToken ? 'on' : 'off'})`
+  );
 });
 
 function shutdown(): void {
