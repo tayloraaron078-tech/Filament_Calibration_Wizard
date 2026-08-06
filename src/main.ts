@@ -1,8 +1,8 @@
 import './styles.css';
 import { startApp } from './app';
 import { hydrateSettingsFromServer } from './storage/store';
-import { setStoredToken, setStoredServerUrl } from './storage/serverBridge';
-import { captureTokenFromUrl, captureServerUrlFromUrl } from './storage/tokenCapture';
+import { getStoredToken, setStoredToken, setStoredServerUrl } from './storage/serverBridge';
+import { captureTokenFromUrl, captureServerUrlFromUrl, shouldApplyServerUrlFromLink } from './storage/tokenCapture';
 
 /**
  * A self-hosted deployment can hand a user a one-time link carrying their
@@ -13,10 +13,18 @@ import { captureTokenFromUrl, captureServerUrlFromUrl } from './storage/tokenCap
  * the very first backend call, not just saved for next time) so neither
  * lingers in history/bookmarks/Referer. A single link/QR code carrying both
  * params is enough for one-shot desktop onboarding.
+ *
+ * SECURITY: `?server=` is deliberately NOT applied unattended when a token
+ * is already stored and this link doesn't also carry a fresh one — see
+ * shouldApplyServerUrlFromLink()'s doc comment. Without this guard, a bare
+ * `?server=https://attacker-host` link would silently repoint an existing
+ * stored token's Authorization header at an attacker-chosen host.
  */
 function captureTokenFromLocation(): void {
   let href = location.href;
   let changed = false;
+
+  const hadStoredToken = getStoredToken() !== null;
 
   const tokenResult = captureTokenFromUrl(href);
   if (tokenResult.token) {
@@ -27,11 +35,19 @@ function captureTokenFromLocation(): void {
 
   const serverResult = captureServerUrlFromUrl(href);
   if (serverResult.serverUrl) {
-    try {
-      setStoredServerUrl(serverResult.serverUrl);
-    } catch {
-      // Malformed ?server= value — still drop it from the URL below, but
-      // leave any existing/no stored server URL alone.
+    const allowed = shouldApplyServerUrlFromLink({
+      hasStoredToken: hadStoredToken,
+      hasFreshTokenInLink: Boolean(tokenResult.token)
+    });
+    if (allowed) {
+      try {
+        setStoredServerUrl(serverResult.serverUrl);
+      } catch {
+        // Malformed ?server= value — still drop it from the URL below, but
+        // leave any existing/no stored server URL alone.
+      }
+    } else {
+      console.warn('Ignored ?server= from a link: a token is already stored and this link did not supply a fresh one.');
     }
     href = serverResult.strippedUrl;
     changed = true;

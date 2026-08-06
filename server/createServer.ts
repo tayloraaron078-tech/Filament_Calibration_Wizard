@@ -53,8 +53,8 @@ async function handleRequest(
     return;
   }
 
-  applyCorsHeaders(res);
-  if (handlePreflight(req, res)) return;
+  applyCorsHeaders(res, apiToken);
+  if (handlePreflight(req, res, apiToken)) return;
 
   if (apiToken && !isHealthCheck(req.method, url.pathname)) {
     if (!isAuthorized(req, apiToken)) {

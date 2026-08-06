@@ -45,3 +45,20 @@ export function captureServerUrlFromUrl(url: string): ServerUrlCaptureResult {
   const { value, strippedUrl } = captureParam(url, 'server');
   return { serverUrl: value, strippedUrl };
 }
+
+/**
+ * SECURITY: a bare `?server=` link must never be able to silently redirect
+ * an ALREADY-stored token's Authorization header to a host of the link
+ * author's choosing — that's a one-click token exfiltration (a stored token
+ * from a legitimate earlier `?token=` onboarding gets sent, unattended, to
+ * whatever host a since-received link names). So a URL-supplied server is
+ * only trusted automatically when there is nothing yet to steal (no token
+ * stored) or when the very same link is also supplying a fresh token — in
+ * that case the old token is overwritten before the new server is ever
+ * contacted, so it's never sent anywhere. Any other case (a stored token,
+ * no fresh token in this link) must be rejected here; main.ts is expected
+ * to drop the `?server=` value rather than persist it.
+ */
+export function shouldApplyServerUrlFromLink(opts: { hasStoredToken: boolean; hasFreshTokenInLink: boolean }): boolean {
+  return !opts.hasStoredToken || opts.hasFreshTokenInLink;
+}
