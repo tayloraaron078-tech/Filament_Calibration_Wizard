@@ -198,6 +198,16 @@ data will load or save. You can hand it to a browser once via
 strips it from the URL immediately, so it never lingers in history or
 bookmarks.
 
+**Connecting a client that isn't served by the server itself** (the desktop
+app below, or a browser tab opened at some other address): a relative
+`/api/v1/...` request only reaches the server when the page is served BY it.
+For anything else, open Settings → *Server connection* and enter the
+server's own URL (`https://your-host:8080`) in the "Server URL" field — this
+switches the app to absolute requests against that address. Same as the
+token, a one-time link can set it too: `https://your-host/?server=<url>`, and
+`?token=` and `?server=` can be combined in one link for onboarding a new
+device in a single step.
+
 **Migrating existing browser-only data to a server-connected instance:** in
 the OLD instance (the one with your existing projects/printers/photos in
 browser storage), go to Settings → *⭳ Export all data + photos* to download a
@@ -228,8 +238,13 @@ npx tauri build    # produces the native app plus configured bundles for the cur
 ```
 
 No code changes are required — the app already avoids absolute URLs and needs no server.
-Inside Tauri, data persists in the WebView's local storage; the JSON backup/restore in
-Settings is the supported migration path between browser and desktop builds.
+Inside Tauri, data persists in the WebView's local storage by default; the JSON
+backup/restore in Settings is the supported migration path between browser and desktop
+builds. The desktop app can also connect to a [self-hosted
+server](#self-hosted-server-mode) the same way any other non-same-origin client does —
+Tauri loads its assets from `tauri://`, not from the server, so a relative request never
+reaches it; enter the server's URL in Settings → *Server connection* (or use a one-time
+`?server=`/`?token=` link) to switch it to absolute requests against your server instead.
 
 ## Data storage & backups
 

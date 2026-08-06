@@ -4,7 +4,10 @@ import { exportAll, importBackup } from '../export/backup';
 import { importFilePicker } from './importExport';
 import { applyTheme } from '../app';
 import { idb } from '../storage/db';
-import { http, isBackendReadySync, getStoredToken, setStoredToken, clearStoredToken } from '../storage/serverBridge';
+import {
+  http, isBackendReadySync, getStoredToken, setStoredToken, clearStoredToken,
+  getStoredServerUrl, setStoredServerUrl, clearStoredServerUrl
+} from '../storage/serverBridge';
 import { eraseEverything } from '../storage/eraseEverything';
 import { getConnectionState } from '../storage/connectionState';
 import { loadExperimentalFeatures, saveExperimentalFeatures } from '../slicerIntegration/featureFlags';
@@ -143,27 +146,59 @@ export function renderSettings(root: HTMLElement): void {
   );
 }
 
-/** Privacy card's data-location bullet — the flat "never leaves this device" claim is only true in 'no-backend' mode. */
+/** Privacy card's data-location bullet — the flat "never leaves this device" claim only holds when no server is actually reachable ('no-backend'/'no-url'). */
 function privacyDataLine(): string {
-  return getConnectionState() === 'no-backend'
+  const state = getConnectionState();
+  return state === 'no-backend' || state === 'no-url'
     ? 'Nothing you enter — including photos — ever leaves this device.'
     : 'Nothing you enter — including photos — leaves this device except to your own connected server. Never a third party.';
 }
 
 /**
- * 'no-backend' (the common case) stays a single unobtrusive line rather than
- * a full card, matching the "don't clutter the page for the default case"
- * call in the phase spec. 'connected'/'needs-token' get a full card since
- * there's an actual token field and (for 'needs-token') an action required.
+ * 'no-backend' with no server URL configured (the common case) stays a
+ * single unobtrusive line plus a collapsed "have a server?" affordance,
+ * matching the "don't clutter the page for the default case" call in the
+ * phase spec. Every other state gets a full card: there's an actual field
+ * to fill in and (for 'no-url'/'needs-token') an action required.
  */
 function serverConnectionCard(root: HTMLElement): HTMLElement {
   const state = getConnectionState();
-
-  if (state === 'no-backend') {
-    return h('p', { class: 'field-help' }, 'Not connected to a server — everything is stored in this browser only.');
-  }
-
   const rerender = () => { clear(root); renderSettings(root); };
+
+  const urlField = (): HTMLElement => {
+    const current = getStoredServerUrl();
+    const input = h('input', { type: 'text', value: current ?? '', placeholder: 'https://your-server:8090' }) as HTMLInputElement;
+    const saveBtn = h('button', {
+      class: 'btn btn-sm', onClick: async () => {
+        const v = input.value.trim();
+        if (!v) { toast('Enter a server URL first.', 'error'); return; }
+        try {
+          setStoredServerUrl(v);
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Invalid server URL.', 'error');
+          return;
+        }
+        await hydrateSettingsFromServer();
+        toast(getConnectionState() === 'no-backend' ? 'URL saved, but the server did not respond.' : 'Connected.', getConnectionState() === 'no-backend' ? 'error' : 'success');
+        rerender();
+      }
+    }, 'Save & connect');
+    const clearBtn = current ? h('button', {
+      class: 'btn btn-sm btn-danger', onClick: async () => {
+        clearStoredServerUrl();
+        await hydrateSettingsFromServer();
+        toast('Server URL cleared.', 'info');
+        rerender();
+      }
+    }, 'Clear') : null;
+    return h('div', { class: 'field' },
+      h('label', {}, 'Server URL'),
+      h('div', { class: 'btn-row' }, input, saveBtn, clearBtn),
+      h('p', { class: 'field-help' }, current
+        ? `Requests go to ${current}. Only needed when this page isn't served BY that address itself (e.g. the desktop app).`
+        : 'Only needed when this page isn\'t served BY your self-hosted server itself — e.g. the desktop app, or a browser tab opened somewhere other than the server\'s own address. Leave blank if you always browse straight to the server.')
+    );
+  };
 
   const tokenField = (): HTMLElement => {
     const current = getStoredToken();
@@ -193,11 +228,37 @@ function serverConnectionCard(root: HTMLElement): HTMLElement {
     );
   };
 
+  if (state === 'no-backend') {
+    if (!getStoredServerUrl()) {
+      return h('div', {},
+        h('p', { class: 'field-help' }, 'Not connected to a server — everything is stored in this browser only.'),
+        h('details', { class: 'advanced' },
+          h('summary', {}, 'Have a self-hosted PerfectFit server?'),
+          urlField()
+        )
+      );
+    }
+    return h('div', { class: 'card' },
+      h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
+      h('p', {}, 'A server URL is configured, but it did not respond to a health check. Check the address and that the server is running.'),
+      urlField()
+    );
+  }
+
+  if (state === 'no-url') {
+    return h('div', { class: 'card' },
+      h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
+      h('p', {}, 'This copy of the app isn\'t served by a server itself (it\'s the desktop app), so it can\'t guess where your self-hosted server is. Enter its URL to connect.'),
+      urlField()
+    );
+  }
+
   if (state === 'connected') {
     return h('div', { class: 'card' },
       h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
       h('p', {}, 'Connected to your self-hosted server. Projects, printer profiles, and photos now live there — not just in this browser.'),
       h('p', { class: 'field-help' }, 'Use the "⭳ Export all data + photos" button above to keep a portable backup of the server\'s data.'),
+      urlField(),
       tokenField()
     );
   }
@@ -221,6 +282,7 @@ function serverConnectionCard(root: HTMLElement): HTMLElement {
   return h('div', { class: 'card' },
     h('h2', { style: 'margin-top:0' }, '🌐 Server connection'),
     h('p', {}, 'A server was found, but it requires an API token and none is set, or the stored one is invalid. Saving, printer, and photo actions will fail until this is fixed.'),
+    urlField(),
     h('div', { class: 'field' },
       h('label', {}, 'API token'),
       h('div', { class: 'btn-row' }, input, connectBtn)

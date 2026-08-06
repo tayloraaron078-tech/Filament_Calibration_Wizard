@@ -1,21 +1,43 @@
 import './styles.css';
 import { startApp } from './app';
 import { hydrateSettingsFromServer } from './storage/store';
-import { setStoredToken } from './storage/serverBridge';
-import { captureTokenFromUrl } from './storage/tokenCapture';
+import { setStoredToken, setStoredServerUrl } from './storage/serverBridge';
+import { captureTokenFromUrl, captureServerUrlFromUrl } from './storage/tokenCapture';
 
 /**
- * A self-hosted deployment can hand a user a one-time `?token=...` link
- * carrying their PERFECTFIT_API_TOKEN. Captured into localStorage and
- * stripped from the URL immediately (before hydrateSettingsFromServer() so
- * the freshly-captured token is used on the very first backend call, not
- * just saved for next time) so it never lingers in history/bookmarks/Referer.
+ * A self-hosted deployment can hand a user a one-time link carrying their
+ * PERFECTFIT_API_TOKEN (`?token=...`) and/or the server's own URL
+ * (`?server=...`, needed for clients that aren't same-origin with it — see
+ * serverBridge.ts). Both are captured into localStorage and stripped from
+ * the URL immediately (before hydrateSettingsFromServer() so they're used on
+ * the very first backend call, not just saved for next time) so neither
+ * lingers in history/bookmarks/Referer. A single link/QR code carrying both
+ * params is enough for one-shot desktop onboarding.
  */
 function captureTokenFromLocation(): void {
-  const { token, strippedUrl } = captureTokenFromUrl(location.href);
-  if (!token) return;
-  setStoredToken(token);
-  history.replaceState(null, '', strippedUrl);
+  let href = location.href;
+  let changed = false;
+
+  const tokenResult = captureTokenFromUrl(href);
+  if (tokenResult.token) {
+    setStoredToken(tokenResult.token);
+    href = tokenResult.strippedUrl;
+    changed = true;
+  }
+
+  const serverResult = captureServerUrlFromUrl(href);
+  if (serverResult.serverUrl) {
+    try {
+      setStoredServerUrl(serverResult.serverUrl);
+    } catch {
+      // Malformed ?server= value — still drop it from the URL below, but
+      // leave any existing/no stored server URL alone.
+    }
+    href = serverResult.strippedUrl;
+    changed = true;
+  }
+
+  if (changed) history.replaceState(null, '', href);
 }
 
 async function bootstrap(): Promise<void> {

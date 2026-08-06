@@ -209,3 +209,67 @@ describe('hydrateSettingsFromServer sets connectionState (three-state detection)
     }
   });
 });
+
+describe('hydrateSettingsFromServer sets connectionState (no-url: desktop runtime, no server URL configured)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is no-url when running desktop with no server URL configured, even though the relative fetch fails', async () => {
+    stubLocalStorage();
+    vi.stubGlobal('window', { __TAURI__: {} });
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('desktop cannot reach a relative path')));
+    const store = await freshStore();
+    const { getConnectionState } = await import('../../src/storage/connectionState');
+
+    await store.hydrateSettingsFromServer();
+
+    expect(getConnectionState()).toBe('no-url');
+  });
+
+  it('is unaffected (still no-backend, not no-url) for a plain non-desktop client with no server URL configured', async () => {
+    stubLocalStorage();
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('no backend in this test')));
+    const store = await freshStore();
+    const { getConnectionState } = await import('../../src/storage/connectionState');
+
+    await store.hydrateSettingsFromServer();
+
+    expect(getConnectionState()).toBe('no-backend');
+  });
+
+  it('transitions from no-url to connected once a reachable server URL is configured', async () => {
+    const server = await startTestServer();
+    try {
+      stubLocalStorage();
+      vi.stubGlobal('window', { __TAURI__: {} });
+      const store = await freshStore();
+      const { getConnectionState } = await import('../../src/storage/connectionState');
+      const { setStoredServerUrl } = await import('../../src/storage/serverBridge');
+
+      await store.hydrateSettingsFromServer();
+      expect(getConnectionState()).toBe('no-url');
+
+      setStoredServerUrl(server.baseUrl);
+      await store.hydrateSettingsFromServer();
+
+      expect(getConnectionState()).toBe('connected');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('is no-backend, not no-url, on desktop once a server URL is configured but unreachable', async () => {
+    stubLocalStorage();
+    vi.stubGlobal('window', { __TAURI__: {} });
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('unreachable')));
+    const store = await freshStore();
+    const { getConnectionState } = await import('../../src/storage/connectionState');
+    const { setStoredServerUrl } = await import('../../src/storage/serverBridge');
+
+    setStoredServerUrl('http://127.0.0.1:1');
+    await store.hydrateSettingsFromServer();
+
+    expect(getConnectionState()).toBe('no-backend');
+  });
+});

@@ -6,6 +6,7 @@ import { HttpError, sendError } from './http.ts';
 import { isAuthorized } from './auth.ts';
 import { dispatch, isHealthCheck } from './router.ts';
 import { serveStatic } from './static.ts';
+import { applyCorsHeaders, handlePreflight } from './cors.ts';
 import type { PerfectFitDb } from './db.ts';
 
 const API_PREFIX = '/api/v1/';
@@ -51,6 +52,9 @@ async function handleRequest(
     }
     return;
   }
+
+  applyCorsHeaders(res);
+  if (handlePreflight(req, res)) return;
 
   if (apiToken && !isHealthCheck(req.method, url.pathname)) {
     if (!isAuthorized(req, apiToken)) {

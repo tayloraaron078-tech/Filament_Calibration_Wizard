@@ -4,7 +4,7 @@ import type {
 } from '../types';
 import { DEFAULT_ORDER } from '../data/calibrations';
 import { idb } from './db';
-import { ApiError, backendReady, http, isBackendReadySync } from './serverBridge';
+import { ApiError, backendReady, getStoredServerUrl, http, isBackendReadySync, isDesktopRuntime } from './serverBridge';
 import { deriveConnectionState, setConnectionState } from './connectionState';
 
 /**
@@ -72,9 +72,12 @@ export function saveSettings(s: AppSettings): void {
  * re-check the connection without a full page reload.
  */
 export async function hydrateSettingsFromServer(): Promise<void> {
+  const isDesktop = isDesktopRuntime();
+  const hasServerUrl = getStoredServerUrl() !== null;
+
   const ready = await backendReady();
   if (!ready) {
-    setConnectionState(deriveConnectionState({ healthOk: false, authFailed: false }));
+    setConnectionState(deriveConnectionState({ healthOk: false, authFailed: false, isDesktop, hasServerUrl }));
     return;
   }
   let authFailed = false;
@@ -87,7 +90,7 @@ export async function hydrateSettingsFromServer(): Promise<void> {
     authFailed = err instanceof ApiError && err.status === 401;
     if (!authFailed) console.warn('Failed to hydrate settings from server', err);
   }
-  setConnectionState(deriveConnectionState({ healthOk: true, authFailed }));
+  setConnectionState(deriveConnectionState({ healthOk: true, authFailed, isDesktop, hasServerUrl }));
 }
 
 /** Auto-save of in-progress form data, keyed by project+step. */

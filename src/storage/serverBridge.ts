@@ -4,14 +4,21 @@
 // slicerIntegration/bridge.ts — everything downstream degrades cleanly to
 // the IndexedDB/localStorage path when no backend is reachable.
 //
-// All request paths are relative (`./api/v1/...`) so this works from any
-// subpath/static host per vite.config.ts's `base: './'` contract.
+// Request paths are relative (`./api/v1/...`) by default, which works when
+// this page is served BY the same server (subpath/static host, per
+// vite.config.ts's `base: './'` contract). That assumption breaks for a
+// client that isn't same-origin with the server — chiefly the Tauri desktop
+// build, which loads its assets from tauri://, not from the Docker host. A
+// persisted, optional server URL (below) switches request building to
+// absolute URLs instead; unset, behavior is byte-for-byte what it was
+// before phase 6.
 // ---------------------------------------------------------------------------
 
 import type { AppSettings, CalibrationId, CalibrationProject, PrinterProfile, StoredPhoto } from '../types';
 
 const API_BASE = './api/v1';
 const TOKEN_KEY = 'perfectfit.apiToken';
+const SERVER_URL_KEY = 'perfectfit.serverUrl';
 
 // --- backend detection -------------------------------------------------------
 
@@ -19,9 +26,15 @@ let backendReadyPromise: Promise<boolean> | null = null;
 /** Synchronous snapshot of the last resolved detection result — false until backendReady() resolves once. */
 let backendReadyValue = false;
 
+/** Forces the next backendReady() call to re-probe rather than return a cached result — needed after the server URL changes, since that changes what "reachable" even means. */
+function resetBackendDetection(): void {
+  backendReadyPromise = null;
+  backendReadyValue = false;
+}
+
 async function detectBackend(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${apiBase()}/health`, { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return false;
     const body = (await res.json()) as { ok?: boolean };
     return body?.ok === true;
@@ -30,7 +43,7 @@ async function detectBackend(): Promise<boolean> {
   }
 }
 
-/** Probes for a live backend once per page load and memoizes the result. */
+/** Probes for a live backend once per page load (or since the last URL/reset change) and memoizes the result. */
 export function backendReady(): Promise<boolean> {
   if (!backendReadyPromise) {
     backendReadyPromise = detectBackend().then((ready) => {
@@ -66,6 +79,58 @@ export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// --- server URL storage -------------------------------------------------------
+// Same accessor shape as the token above, for symmetry in callers (main.ts,
+// Settings). Unset (the default) means "use this page's own address" —
+// existing same-origin browser deployments never need to touch this.
+
+export function isValidServerUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function getStoredServerUrl(): string | null {
+  return localStorage.getItem(SERVER_URL_KEY);
+}
+
+/** Throws if `url` doesn't parse as an http(s) URL — rejects e.g. `javascript:` before it ever reaches localStorage or fetch(). */
+export function setStoredServerUrl(url: string): void {
+  const trimmed = url.trim();
+  if (!isValidServerUrl(trimmed)) {
+    throw new Error('Server URL must start with http:// or https://');
+  }
+  localStorage.setItem(SERVER_URL_KEY, trimmed);
+  resetBackendDetection();
+}
+
+export function clearStoredServerUrl(): void {
+  localStorage.removeItem(SERVER_URL_KEY);
+  resetBackendDetection();
+}
+
+function apiBase(): string {
+  const url = getStoredServerUrl();
+  return url ? `${url.replace(/\/$/, '')}/api/v1` : API_BASE;
+}
+
+/**
+ * True when running somewhere a relative fetch structurally cannot reach a
+ * same-origin server (currently: the Tauri desktop shell, which serves its
+ * assets from tauri://). Duplicated rather than imported from
+ * slicerIntegration/bridge.ts's isDesktop(): that check dereferences
+ * `window` unconditionally, which throws under this project's bare-Node
+ * vitest environment (no jsdom) — store.ts and this module are exercised
+ * there directly, and storage/ shouldn't need to pull in the
+ * slicerIntegration bounded context just for an environment guard.
+ */
+export function isDesktopRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI__' in window;
+}
+
 // --- fetch helpers ------------------------------------------------------------
 
 /** Thrown by the request helpers below instead of a plain Error, so callers (namely connectionState detection) can tell a 401 apart from other failures. */
@@ -82,7 +147,7 @@ function authHeaders(): HeadersInit {
 }
 
 function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, {
+  return fetch(`${apiBase()}${path}`, {
     ...init,
     headers: { ...authHeaders(), ...(init.headers ?? {}) }
   });

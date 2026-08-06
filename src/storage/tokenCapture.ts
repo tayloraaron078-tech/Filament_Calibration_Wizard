@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Pure logic for the `?token=xxxx` onboarding flow: a self-hosted deployment
-// can hand a user a one-time link (e.g. from the container's admin) that
-// carries their PERFECTFIT_API_TOKEN. main.ts's bootstrap() captures it into
-// localStorage and strips it from the URL immediately, so it never lingers
+// Pure logic for one-shot onboarding via URL query params: a self-hosted
+// deployment can hand a user a link (e.g. from the container's admin, or a
+// QR code for the desktop app) carrying their PERFECTFIT_API_TOKEN and/or
+// the server's own URL. main.ts's bootstrap() captures these into
+// localStorage and strips them from the URL immediately, so neither lingers
 // in browser history, bookmarks, or gets leaked via a Referer header.
 //
 // Kept DOM/location-free so it's testable with plain URL strings — see
@@ -16,13 +17,31 @@ export interface TokenCaptureResult {
   strippedUrl: string;
 }
 
-export function captureTokenFromUrl(url: string): TokenCaptureResult {
-  const u = new URL(url);
-  const token = u.searchParams.get('token');
-  if (token === null) return { token: null, strippedUrl: url };
+export interface ServerUrlCaptureResult {
+  /** The captured server URL, or null if the URL carried no `server` query param. */
+  serverUrl: string | null;
+  /** `url` with the `server` param removed (query string dropped entirely if now empty). Unchanged when serverUrl is null. */
+  strippedUrl: string;
+}
 
-  u.searchParams.delete('token');
+function captureParam(url: string, param: string): { value: string | null; strippedUrl: string } {
+  const u = new URL(url);
+  const value = u.searchParams.get(param);
+  if (value === null) return { value: null, strippedUrl: url };
+
+  u.searchParams.delete(param);
   const search = u.searchParams.toString();
   const strippedUrl = `${u.origin}${u.pathname}${search ? `?${search}` : ''}${u.hash}`;
-  return { token, strippedUrl };
+  return { value, strippedUrl };
+}
+
+export function captureTokenFromUrl(url: string): TokenCaptureResult {
+  const { value, strippedUrl } = captureParam(url, 'token');
+  return { token: value, strippedUrl };
+}
+
+/** Same shape/behavior as captureTokenFromUrl, for a `?server=https://host:port` param — lets one link/QR code set both token and server URL for desktop onboarding. */
+export function captureServerUrlFromUrl(url: string): ServerUrlCaptureResult {
+  const { value, strippedUrl } = captureParam(url, 'server');
+  return { serverUrl: value, strippedUrl };
 }

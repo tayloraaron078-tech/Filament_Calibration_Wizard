@@ -259,6 +259,146 @@ describe('http.bulkErase', () => {
   });
 });
 
+describe('server URL config', () => {
+  it('defaults to the relative API base when no server URL is stored (no regression)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { http } = await freshModule();
+
+    await http.listPrinters();
+
+    expect(fetchMock).toHaveBeenCalledWith('./api/v1/printers', expect.anything());
+  });
+
+  it('builds absolute URLs once a server URL is stored', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { http, setStoredServerUrl } = await freshModule();
+
+    setStoredServerUrl('http://192.168.1.50:8090');
+    await http.listPrinters();
+
+    expect(fetchMock).toHaveBeenCalledWith('http://192.168.1.50:8090/api/v1/printers', expect.anything());
+  });
+
+  it('strips a trailing slash on the stored server URL before appending /api/v1', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { http, setStoredServerUrl } = await freshModule();
+
+    setStoredServerUrl('http://192.168.1.50:8090/');
+    await http.listPrinters();
+
+    expect(fetchMock).toHaveBeenCalledWith('http://192.168.1.50:8090/api/v1/printers', expect.anything());
+  });
+
+  it('detectBackend probes the absolute health endpoint once a server URL is stored', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { backendReady, setStoredServerUrl } = await freshModule();
+
+    setStoredServerUrl('https://server.example');
+    expect(await backendReady()).toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://server.example/api/v1/health', expect.anything());
+  });
+
+  it('reverts to the relative API base after the server URL is cleared', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { http, setStoredServerUrl, clearStoredServerUrl } = await freshModule();
+
+    setStoredServerUrl('http://192.168.1.50:8090');
+    clearStoredServerUrl();
+    await http.listPrinters();
+
+    expect(fetchMock).toHaveBeenLastCalledWith('./api/v1/printers', expect.anything());
+  });
+
+  it('setStoredServerUrl forces backendReady() to re-probe rather than return a stale cached result', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false }), { status: 200 })) // relative probe: not reachable
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 })); // absolute probe: reachable
+    vi.stubGlobal('fetch', fetchMock);
+    const { backendReady, setStoredServerUrl } = await freshModule();
+
+    expect(await backendReady()).toBe(false);
+
+    setStoredServerUrl('http://192.168.1.50:8090');
+    expect(await backendReady()).toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('getStoredServerUrl/setStoredServerUrl/clearStoredServerUrl round-trip through localStorage under a shared key', async () => {
+    const { getStoredServerUrl, setStoredServerUrl, clearStoredServerUrl } = await freshModule();
+
+    expect(getStoredServerUrl()).toBeNull();
+
+    setStoredServerUrl('http://example.test:8090');
+    expect(getStoredServerUrl()).toBe('http://example.test:8090');
+    expect(localStorage.getItem('perfectfit.serverUrl')).toBe('http://example.test:8090');
+
+    clearStoredServerUrl();
+    expect(getStoredServerUrl()).toBeNull();
+  });
+});
+
+describe('isValidServerUrl / setStoredServerUrl validation', () => {
+  it('accepts http and https URLs', async () => {
+    const { isValidServerUrl } = await freshModule();
+    expect(isValidServerUrl('http://localhost:8090')).toBe(true);
+    expect(isValidServerUrl('https://my-server.example')).toBe(true);
+  });
+
+  it('rejects non-http(s) protocols, e.g. javascript:', async () => {
+    const { isValidServerUrl } = await freshModule();
+    expect(isValidServerUrl('javascript:alert(1)')).toBe(false);
+    expect(isValidServerUrl('file:///etc/passwd')).toBe(false);
+    expect(isValidServerUrl('ftp://example.test')).toBe(false);
+  });
+
+  it('rejects unparseable input', async () => {
+    const { isValidServerUrl } = await freshModule();
+    expect(isValidServerUrl('not a url')).toBe(false);
+    expect(isValidServerUrl('')).toBe(false);
+  });
+
+  it('setStoredServerUrl throws and does not persist an invalid URL', async () => {
+    const { setStoredServerUrl, getStoredServerUrl } = await freshModule();
+
+    expect(() => setStoredServerUrl('javascript:alert(1)')).toThrow();
+    expect(getStoredServerUrl()).toBeNull();
+  });
+
+  it('setStoredServerUrl trims surrounding whitespace before validating/storing', async () => {
+    const { setStoredServerUrl, getStoredServerUrl } = await freshModule();
+
+    setStoredServerUrl('  http://example.test:8090  ');
+
+    expect(getStoredServerUrl()).toBe('http://example.test:8090');
+  });
+});
+
+describe('isDesktopRuntime', () => {
+  it('is false when there is no window global (bare Node / this test environment)', async () => {
+    const { isDesktopRuntime } = await freshModule();
+    expect(isDesktopRuntime()).toBe(false);
+  });
+
+  it('is false when window exists but carries no __TAURI__ global', async () => {
+    vi.stubGlobal('window', {});
+    const { isDesktopRuntime } = await freshModule();
+    expect(isDesktopRuntime()).toBe(false);
+  });
+
+  it('is true when window carries a __TAURI__ global', async () => {
+    vi.stubGlobal('window', { __TAURI__: {} });
+    const { isDesktopRuntime } = await freshModule();
+    expect(isDesktopRuntime()).toBe(true);
+  });
+});
+
 describe('token accessors', () => {
   it('getStoredToken/setStoredToken/clearStoredToken round-trip through localStorage under a shared key', async () => {
     const { getStoredToken, setStoredToken, clearStoredToken } = await freshModule();
