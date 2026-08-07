@@ -15,8 +15,9 @@ without tutorials, wikis, or guesswork.
 - **No black boxes**: every calculation shows inputs, formula, substitution, and rounding.
 - **Signature features**: calibration timeline, confidence score, smart retest recommendations,
   printable one-page calibration card with QR, printable full report, JSON backup/restore.
-- **Privacy**: no account, no backend, no analytics/telemetry. Everything (photos included)
-  stays in your browser's local storage. External model links open third-party sites.
+- **Privacy**: no account, no analytics/telemetry, no backend by default — everything (photos
+  included) stays in your browser's local storage. An opt-in [self-hosted server](#self-hosted-server-mode)
+  is never a third party either. External model links open third-party sites.
 
 <img width="1102" height="831" alt="Create Project" src="https://github.com/user-attachments/assets/36fc37fd-c053-4746-814b-48919f965853" />
 
